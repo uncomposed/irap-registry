@@ -1,0 +1,25 @@
+protocol_version: irap/0.1
+id: https://reviews.example/attestations/mira-2026-08-28
+rendering:
+  id: https://renderings.example/irap-field-guide
+  sha256: 9295f8f178586e5a5e1f4d198748dd841f29ba76709f697c3553b5f9358f36aa
+against:
+  idea_id: https://proximitytoprogress.com/ideas/irap
+  repository: https://git.example.org/proximity/irap.git
+  git_commit:
+    algorithm: sha1
+    value: 7f4d8a56e2b9c130af8972bb3b7c63aa4b871e0d
+verifier:
+  id: did:key:mira-chen
+  key_id: did:key:mira-chen#primary
+judgment:
+  claim: faithful_rendering
+  result: pass
+evidence:
+  uri: https://reviews.example/packages/irap-field-guide-mira
+  sha256: d82c9fdcf9786bcada26727d2dc09dfb3b595395335c90b1c67bb23012abc31f
+  summary: Compared protocol objects, status boundaries, and historical policy lookup.
+signed_at: 2026-08-28T14:32:00Z
+signature:
+  algorithm: ed25519
+  value: oLsoaLJH7Kyxexq9A2Aqd9GktIckj8SZq+jAqycZB9fhvUs9uCFCs+S0oqyEy5N90Chb5ZHDYP5csSUIoTTIBg==

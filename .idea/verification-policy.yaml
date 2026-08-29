@@ -1,0 +1,8 @@
+protocol_version: irap/0.1
+state:
+  note: Replaced with the exact repository commit when publishing the first release.
+rules:
+  - claim: faithful_rendering
+    eligible_verifiers: [did:key:mira-chen]
+    minimum_passes: 1
+    recognized_failures_block: true

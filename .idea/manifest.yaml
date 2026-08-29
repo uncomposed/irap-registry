@@ -1,0 +1,10 @@
+spec_version: irap/0.1
+idea:
+  id: https://proximitytoprogress.com/ideas/irap
+  name: Idea Rendering Attestation Protocol
+repository:
+  canonical_branch: main
+  mirrors: []
+verification:
+  verifiers: .idea/verifiers.yaml
+  policy: .idea/verification-policy.yaml

@@ -1,0 +1,12 @@
+protocol_version: irap/0.1
+state:
+  note: Replaced with the exact repository commit when publishing the first release.
+verifiers:
+  - id: did:key:mira-chen
+    name: Mira Chen
+    kind: human
+    key:
+      id: did:key:mira-chen#primary
+      algorithm: ed25519
+      public_key: 11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=
+    scopes: [faithful_rendering]

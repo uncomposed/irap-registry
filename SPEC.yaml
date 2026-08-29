@@ -1,0 +1,99 @@
+protocol:
+  name: Idea Rendering Attestation Protocol
+  short_name: IRAP
+  version: "0.1"
+  status: draft
+
+provenance:
+  source_conversation: "Analyze Plan A Bargaining"
+  recovered_on: 2026-08-29
+  note: >-
+    This working copy is reconstructed from the source conversation's final
+    summary and preceding design turns because its generated file attachments
+    were not exposed by the conversation retrieval interface. It preserves all
+    confirmed normative decisions and is the implementation baseline for this
+    repository.
+
+purpose: >-
+  Identify renderings of exact Git states and express attributable, signed
+  judgments about those relationships without treating verification as an
+  intrinsic property of an artifact.
+
+principles:
+  - Ideas are versioned using Git; no forge is normative.
+  - A state is identified by a repository identity and a full Git object ID.
+  - Renderings are independently published artifacts.
+  - Verification is an attributable act, not an intrinsic attribute.
+  - Anyone may attest.
+  - Recognition is evaluated under the policy in the exact attested Git state.
+  - Signature validity and policy recognition are separate determinations.
+  - Supporting evidence is content-addressed but may be hosted elsewhere.
+  - Federation is an optional transport and is outside the trust model.
+
+object_model:
+  idea:
+    description: A durable semantic identity with one or more Git transports.
+    required: [id, name, repository]
+  state:
+    description: An immutable Git state of an idea.
+    required: [idea_id, repository, git_commit]
+  rendering:
+    description: A published artifact claiming to render one exact state.
+    required: [id, renders, artifact, creator, created_at]
+  attestation:
+    description: A signed judgment by a named verifier about a rendering/state relationship.
+    required: [id, rendering, against, verifier, judgment, evidence, signed_at, signature]
+  verifier_registry:
+    description: Identities, keys, provenance, and scopes contained in an idea state.
+    required: [state, verifiers]
+  verification_policy:
+    description: Historical rules that determine which valid attestations are recognized.
+    required: [state, rules]
+
+git_object_id:
+  required: [algorithm, value]
+  algorithms:
+    sha1:
+      lowercase_hex_length: 40
+    sha256:
+      lowercase_hex_length: 64
+  rule: Short object IDs are never valid protocol identifiers.
+
+serialization:
+  human_facing: YAML 1.2
+  signed_projection: JSON
+  canonicalization: RFC 8785 JSON Canonicalization Scheme
+  exclusions:
+    - The signature member itself is excluded from the signed payload.
+  signature:
+    required_algorithm: ed25519
+    encoding: base64
+
+repository_layout:
+  manifest: .idea/manifest.yaml
+  verifier_registry: .idea/verifiers.yaml
+  verification_policy: .idea/verification-policy.yaml
+
+recognition_algorithm:
+  - Validate the rendering, attestation, and full Git object IDs.
+  - Require the attestation and rendering to name the same idea and exact state.
+  - Require the signed rendering ID and artifact digest to match the rendered artifact.
+  - Canonicalize the unsigned attestation and verify its Ed25519 signature.
+  - Load the verifier registry and policy from the attested Git state, not the latest branch.
+  - Determine whether the signing key, verifier scope, and policy eligibility match the claim.
+  - Apply the historical threshold to distinct recognized verifiers.
+
+required_status_boundaries:
+  recognized: The signature is valid and the attestation satisfies the historical policy.
+  valid_unrecognized: The signature is valid but the signer or claim is not recognized by the historical policy.
+  invalid: The signature, target binding, artifact binding, or historical-state binding fails.
+
+extensions:
+  activitypub:
+    status: optional_downstream_transport
+    normative: false
+
+self_description:
+  rule: >-
+    A product implementing IRAP must disclose the exact Git commit of the IRAP
+    state it implements, so the implementation is itself auditable as a rendering.

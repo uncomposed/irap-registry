@@ -1,0 +1,13 @@
+spec_version: "0.1"
+claims:
+  faithful_rendering:
+    definition: >
+      The rendering materially represents this exact idea state without silently
+      substituting a substantively different idea while presenting itself as faithful.
+    recognition:
+      eligible_verifiers:
+        ids:
+          - https://reviewer.example/#alice
+          - https://reviewer.example/agents/fidelity-1
+      rule:
+        type: any_one_pass

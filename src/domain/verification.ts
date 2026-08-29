@@ -12,7 +12,8 @@ import type {
 const encoder = new TextEncoder()
 
 function fromBase64(value: string) {
-  const binary = atob(value)
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))
   return Uint8Array.from(binary, (character) => character.charCodeAt(0))
 }
 

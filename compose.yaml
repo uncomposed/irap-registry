@@ -1,0 +1,23 @@
+services:
+  irap:
+    build:
+      context: .
+    image: irap-publisher:local
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - irap_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+
+volumes:
+  irap_data:

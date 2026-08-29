@@ -8,17 +8,14 @@ import { attestations, ideaState, policy, rendering, verifierRegistry } from '..
 import type { Attestation } from '../src/domain/types'
 
 describe('IRAP protocol package', () => {
-  it('parses the normative YAML and contains all six typed objects', () => {
+  it('parses the recovered normative YAML and contains the six typed definitions', () => {
     const spec = load(readFileSync(resolve('SPEC.yaml'), 'utf8')) as Record<string, unknown>
-    const model = spec.object_model as Record<string, unknown>
-    expect(Object.keys(model)).toEqual([
-      'idea',
-      'state',
-      'rendering',
-      'attestation',
-      'verifier_registry',
-      'verification_policy',
-    ])
+    expect(spec.protocol).toBeTruthy()
+    expect(spec.idea_manifest).toBeTruthy()
+    expect(spec.rendering).toBeTruthy()
+    expect(spec.attestation).toBeTruthy()
+    expect(spec.verifier_registry).toBeTruthy()
+    expect(spec.verification_policy).toBeTruthy()
   })
 
   it('requires full Git object IDs', () => {

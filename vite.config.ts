@@ -16,6 +16,14 @@ function repositoryCommit() {
 export default defineConfig({
   base: './',
   plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://127.0.0.1:8787',
+      '/ap': 'http://127.0.0.1:8787',
+      '/.well-known': 'http://127.0.0.1:8787',
+      '/nodeinfo': 'http://127.0.0.1:8787',
+    },
+  },
   define: {
     __IRAP_IMPLEMENTATION_COMMIT__: JSON.stringify(repositoryCommit()),
   },

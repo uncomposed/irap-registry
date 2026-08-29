@@ -1,11 +1,12 @@
 spec_version: "0.1"
 idea:
-  id: https://proximitytoprogress.com/ideas/irap-publisher
-  name: IRAP Publisher
+  id: https://ideas.example.org/ai-pacing
+  name: AI Pacing
 repository:
   object_format: sha1
   canonical_ref: refs/heads/main
-  mirrors: []
+  mirrors:
+    - https://codeberg.org/example/ai-pacing.git
 verification:
   verifiers_path: .idea/verifiers.yaml
   policy_path: .idea/verification-policy.yaml

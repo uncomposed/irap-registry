@@ -1,0 +1,20 @@
+spec_version: "0.1"
+verifiers:
+  - id: https://reviewer.example/#alice
+    display_name: Alice Example
+    kind: human
+    keys:
+      - id: alice-2026
+        algorithm: Ed25519
+        public_key_multibase: zReplaceWithRealKey
+  - id: https://reviewer.example/agents/fidelity-1
+    display_name: Fidelity Agent 1
+    kind: ai
+    operator: https://reviewer.example/
+    system:
+      model: example-model
+      procedure: https://reviewer.example/procedures/fidelity-v1
+    keys:
+      - id: agent-2026
+        algorithm: Ed25519
+        public_key_multibase: zReplaceWithRealKey

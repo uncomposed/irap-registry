@@ -1,0 +1,15 @@
+# Inspect the live /etc/caddy/Caddyfile before adapting this example.
+# The container binds only to loopback; Caddy terminates public HTTPS.
+ideas.proximitytoprogress.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8787
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  }
+}

@@ -10,8 +10,9 @@ import { FederationService } from './federation.js'
 import { registerActivityPub } from './activitypub.js'
 import { registerApi } from './api.js'
 import { GitResolver } from './git-resolver.js'
+import { registerRegistryApi } from './registry-api.js'
 
-export async function buildApp(config: ServiceConfig) {
+export async function buildApp(config: ServiceConfig, overrides: { gitResolver?: GitResolver } = {}) {
   const app = Fastify({
     logger: config.production ? true : { level: process.env.LOG_LEVEL ?? 'info' },
     bodyLimit: 1_000_000,
@@ -20,12 +21,13 @@ export async function buildApp(config: ServiceConfig) {
   })
   const db = openDatabase(config.databasePath)
   const federation = new FederationService(db, config, app.log)
-  const gitResolver = new GitResolver(config)
+  const gitResolver = overrides.gitResolver ?? new GitResolver(config)
 
   await app.register(rawBody, { global: false, encoding: 'utf8', runFirst: true })
   await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' })
   registerActivityPub(app, config, db, federation)
   registerApi(app, config, db, federation, gitResolver)
+  registerRegistryApi(app, config, db, federation, gitResolver)
 
   if (existsSync(config.staticPath)) {
     await app.register(fastifyStatic, { root: config.staticPath, wildcard: false })

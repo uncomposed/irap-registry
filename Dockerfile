@@ -1,4 +1,6 @@
 FROM node:22-bookworm-slim AS build
+ARG IRAP_IMPLEMENTATION_COMMIT=working-tree-uncommitted
+ENV IRAP_IMPLEMENTATION_COMMIT=$IRAP_IMPLEMENTATION_COMMIT
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

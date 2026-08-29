@@ -3,6 +3,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 function repositoryCommit() {
+  const suppliedCommit = process.env.IRAP_IMPLEMENTATION_COMMIT?.trim()
+  if (suppliedCommit && /^[0-9a-f]{40,64}$/.test(suppliedCommit)) return suppliedCommit
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',
@@ -14,7 +16,7 @@ function repositoryCommit() {
 }
 
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [react()],
   server: {
     proxy: {

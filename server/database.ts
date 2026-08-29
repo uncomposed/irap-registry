@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto'
+import { generateKeyPairSync, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
@@ -45,6 +45,53 @@ export type DeliveryRow = {
   next_attempt_at: string
   status: string
   last_error: string | null
+}
+
+export type IdeaStateRow = {
+  id: string
+  idea_id: string
+  repository: string
+  object_format: 'sha1' | 'sha256'
+  commit_value: string
+  source_revision: string
+  manifest_yaml: string
+  verifiers_yaml: string
+  policy_yaml: string
+  resolved_at: string
+}
+
+export type RenderingRow = {
+  id: string
+  rendering_uri: string
+  idea_id: string
+  state_id: string
+  artifact_uri: string
+  artifact_digest: string
+  digest_verified: number
+  creator_uri: string
+  title: string | null
+  description: string | null
+  submitted_at: string
+  raw_manifest_json: string
+  status: 'active' | 'withdrawn' | 'unreachable'
+}
+
+export type AttestationRow = {
+  id: string
+  attestation_uri: string
+  rendering_id: string
+  target_commit: string
+  verifier_uri: string
+  verifier_key_id: string
+  claim: string
+  result: 'pass' | 'fail' | 'abstain' | 'indeterminate'
+  note: string | null
+  issued_at: string
+  raw_attestation_json: string
+  signature_valid: number
+  recognition_status: 'recognized' | 'unrecognized' | 'invalid' | 'indeterminate'
+  recognition_reasons_json: string
+  created_at: string
 }
 
 export function openDatabase(path: string) {
@@ -117,14 +164,76 @@ export function openDatabase(path: string) {
       public_key_pem TEXT NOT NULL,
       fetched_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS idea_states (
+      id TEXT PRIMARY KEY,
+      idea_id TEXT NOT NULL,
+      repository TEXT NOT NULL,
+      object_format TEXT NOT NULL CHECK (object_format IN ('sha1', 'sha256')),
+      commit_value TEXT NOT NULL,
+      source_revision TEXT NOT NULL,
+      manifest_yaml TEXT NOT NULL,
+      verifiers_yaml TEXT NOT NULL,
+      policy_yaml TEXT NOT NULL,
+      resolved_at TEXT NOT NULL,
+      UNIQUE(repository, commit_value)
+    );
+    CREATE INDEX IF NOT EXISTS idea_states_idea ON idea_states(idea_id, resolved_at DESC);
+    CREATE TABLE IF NOT EXISTS renderings (
+      id TEXT PRIMARY KEY,
+      rendering_uri TEXT NOT NULL UNIQUE,
+      idea_id TEXT NOT NULL,
+      state_id TEXT NOT NULL REFERENCES idea_states(id),
+      artifact_uri TEXT NOT NULL,
+      artifact_digest TEXT NOT NULL,
+      digest_verified INTEGER NOT NULL DEFAULT 0,
+      creator_uri TEXT NOT NULL,
+      title TEXT,
+      description TEXT,
+      submitted_at TEXT NOT NULL,
+      raw_manifest_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'withdrawn', 'unreachable'))
+    );
+    CREATE INDEX IF NOT EXISTS renderings_idea ON renderings(idea_id, submitted_at DESC);
+    CREATE TABLE IF NOT EXISTS attestations (
+      id TEXT PRIMARY KEY,
+      attestation_uri TEXT NOT NULL UNIQUE,
+      rendering_id TEXT NOT NULL REFERENCES renderings(id),
+      target_commit TEXT NOT NULL,
+      verifier_uri TEXT NOT NULL,
+      verifier_key_id TEXT NOT NULL,
+      claim TEXT NOT NULL,
+      result TEXT NOT NULL CHECK (result IN ('pass', 'fail', 'abstain', 'indeterminate')),
+      note TEXT,
+      issued_at TEXT NOT NULL,
+      raw_attestation_json TEXT NOT NULL,
+      signature_valid INTEGER NOT NULL,
+      recognition_status TEXT NOT NULL CHECK (recognition_status IN ('recognized', 'unrecognized', 'invalid', 'indeterminate')),
+      recognition_reasons_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS attestations_rendering ON attestations(rendering_id, issued_at DESC);
   `)
   ensureColumn(db, 'ideas', 'git_verified', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'ideas', 'manifest_yaml', 'TEXT')
   ensureColumn(db, 'ideas', 'verifiers_yaml', 'TEXT')
   ensureColumn(db, 'ideas', 'policy_yaml', 'TEXT')
+  backfillIdeaStates(db)
   try { chmodSync(path, 0o600) } catch { /* best effort */ }
   ensureActorKeys(db)
   return db
+}
+
+function backfillIdeaStates(db: Database.Database) {
+  const rows = db.prepare(`SELECT * FROM ideas WHERE git_verified = 1 AND manifest_yaml IS NOT NULL AND verifiers_yaml IS NOT NULL AND policy_yaml IS NOT NULL`).all() as IdeaRow[]
+  const insert = db.prepare(`INSERT OR IGNORE INTO idea_states
+    (id, idea_id, repository, object_format, commit_value, source_revision, manifest_yaml, verifiers_yaml, policy_yaml, resolved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  db.transaction(() => {
+    for (const row of rows) insert.run(
+      randomUUID(), row.idea_id, row.repository, row.commit_algorithm, row.commit_value, row.commit_value,
+      row.manifest_yaml, row.verifiers_yaml, row.policy_yaml, row.updated_at,
+    )
+  })()
 }
 
 function ensureColumn(db: Database.Database, table: string, column: string, definition: string) {

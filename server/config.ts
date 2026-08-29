@@ -16,6 +16,9 @@ export type ServiceConfig = {
   verifyGitOnPublish: boolean
   gitTimeoutMs: number
   gitMaxPackBytes: number
+  verifyArtifactsOnSubmit: boolean
+  artifactTimeoutMs: number
+  artifactMaxBytes: number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig {
@@ -26,10 +29,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig 
   const port = Number(env.PORT ?? 8787)
   const gitTimeoutMs = Number(env.GIT_TIMEOUT_MS ?? 60_000)
   const gitMaxPackBytes = Number(env.GIT_MAX_PACK_BYTES ?? 200 * 1024 * 1024)
+  const artifactTimeoutMs = Number(env.ARTIFACT_TIMEOUT_MS ?? 15_000)
+  const artifactMaxBytes = Number(env.ARTIFACT_MAX_BYTES ?? 10 * 1024 * 1024)
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be a valid TCP port.')
   if (!Number.isInteger(gitTimeoutMs) || gitTimeoutMs < 1_000) throw new Error('GIT_TIMEOUT_MS must be an integer of at least 1000.')
   if (!Number.isInteger(gitMaxPackBytes) || gitMaxPackBytes < 1_048_576) throw new Error('GIT_MAX_PACK_BYTES must be an integer of at least 1048576.')
+  if (!Number.isInteger(artifactTimeoutMs) || artifactTimeoutMs < 1_000) throw new Error('ARTIFACT_TIMEOUT_MS must be an integer of at least 1000.')
+  if (!Number.isInteger(artifactMaxBytes) || artifactMaxBytes < 1_024) throw new Error('ARTIFACT_MAX_BYTES must be an integer of at least 1024.')
   if (production && origin.protocol !== 'https:') throw new Error('PUBLIC_ORIGIN must use HTTPS in production.')
   if (production && adminToken.length < 24) throw new Error('ADMIN_TOKEN must contain at least 24 characters in production.')
 
@@ -49,6 +56,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig 
     verifyGitOnPublish: env.VERIFY_GIT_ON_PUBLISH ? env.VERIFY_GIT_ON_PUBLISH === 'true' : production,
     gitTimeoutMs,
     gitMaxPackBytes,
+    verifyArtifactsOnSubmit: env.VERIFY_ARTIFACTS_ON_SUBMIT ? env.VERIFY_ARTIFACTS_ON_SUBMIT === 'true' : production,
+    artifactTimeoutMs,
+    artifactMaxBytes,
   }
 }
 

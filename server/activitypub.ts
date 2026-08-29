@@ -118,7 +118,7 @@ export function registerActivityPub(
     const ideaCount = (db.prepare('SELECT COUNT(*) AS count FROM ideas').get() as { count: number }).count
     return reply.type('application/json; profile="http://nodeinfo.diaspora.software/ns/schema/2.1#"').send({
       version: '2.1',
-      software: { name: 'irap-publisher', version: '0.2.0' },
+      software: { name: 'irap-publisher', version: '0.3.0' },
       protocols: ['activitypub'],
       services: { inbound: [], outbound: [] },
       openRegistrations: false,

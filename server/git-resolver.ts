@@ -24,6 +24,8 @@ export type ResolvedIdeaState = {
   manifestYaml: string
   verifiersYaml: string
   policyYaml: string
+  canonicalRef: string
+  sourceRevision: string
 }
 
 function safeRepositoryPath(value: unknown, fallback: string) {
@@ -32,19 +34,47 @@ function safeRepositoryPath(value: unknown, fallback: string) {
   return path
 }
 
+function safeRevision(value: string, objectFormat: 'sha1' | 'sha256') {
+  const fullObject = objectFormat === 'sha1' ? /^[0-9a-f]{40}$/ : /^[0-9a-f]{64}$/
+  if (fullObject.test(value)) return value
+  if (!/^refs\/(heads|tags)\/[A-Za-z0-9][A-Za-z0-9._/-]{0,240}$/.test(value)) throw new Error('Git target must be a full object ID or a full heads/tags ref.')
+  if (value.includes('..') || value.includes('//') || value.includes('@{') || value.endsWith('.') || value.endsWith('/') || value.endsWith('.lock')) {
+    throw new Error('Git target contains an unsafe ref name.')
+  }
+  return value
+}
+
 export class GitResolver {
+  private cacheQueues = new Map<string, Promise<void>>()
+
   constructor(
     private config: ServiceConfig,
     private validateUrl: (value: string, config: ServiceConfig) => Promise<URL> = assertFederationUrl,
   ) {}
 
-  async resolve(repository: string, objectFormat: 'sha1' | 'sha256', requestedCommit: string): Promise<ResolvedIdeaState> {
+  private async withCacheLock<T>(cache: string, work: () => Promise<T>) {
+    const previous = this.cacheQueues.get(cache) ?? Promise.resolve()
+    let release = () => {}
+    const turn = new Promise<void>((resolve) => { release = resolve })
+    const queued = previous.then(() => turn)
+    this.cacheQueues.set(cache, queued)
+    await previous
+    try {
+      return await work()
+    } finally {
+      release()
+      if (this.cacheQueues.get(cache) === queued) this.cacheQueues.delete(cache)
+    }
+  }
+
+  async resolve(repository: string, objectFormat: 'sha1' | 'sha256', requestedRevision: string): Promise<ResolvedIdeaState> {
     const url = await this.validateUrl(repository, this.config)
     if (url.protocol !== 'https:' && !(this.config.allowInsecureFederation && url.protocol === 'http:')) {
       throw new Error('Git publication currently supports HTTPS repositories only.')
     }
     await mkdir(this.config.gitCachePath, { recursive: true, mode: 0o700 })
     const cache = join(this.config.gitCachePath, createHash('sha256').update(repository).digest('hex'))
+    const revision = safeRevision(requestedRevision, objectFormat)
     const environment = {
       ...process.env,
       GIT_TERMINAL_PROMPT: '0',
@@ -56,44 +86,49 @@ export class GitResolver {
       GIT_CONFIG_KEY_3: 'fetch.fsckObjects', GIT_CONFIG_VALUE_3: 'true',
       GIT_CONFIG_KEY_4: 'transfer.fsckObjects', GIT_CONFIG_VALUE_4: 'true',
     }
-    const run = async (args: string[], maxBuffer = 1_000_000) => {
-      const result = await runFile('git', args, { env: environment, timeout: this.config.gitTimeoutMs, maxBuffer, encoding: 'utf8' })
-      return result.stdout.trim()
-    }
+    return this.withCacheLock(cache, async () => {
+      const run = async (args: string[], maxBuffer = 1_000_000) => {
+        const result = await runFile('git', args, { env: environment, timeout: this.config.gitTimeoutMs, maxBuffer, encoding: 'utf8' })
+        return result.stdout.trim()
+      }
 
-    try { await stat(cache) } catch { await run(['init', '--bare', cache]) }
-    await run(['-C', cache, 'config', 'remote.origin.url', repository])
-    await run(['-C', cache, 'fetch', '--force', '--no-tags', '--depth=1', 'origin', requestedCommit], 4_000_000)
-    const commit = await run(['-C', cache, 'rev-parse', '--verify', `${requestedCommit}^{commit}`])
-    const detectedFormat = await run(['-C', cache, 'rev-parse', '--show-object-format']) as 'sha1' | 'sha256'
-    if (detectedFormat !== objectFormat) throw new Error(`Repository uses ${detectedFormat}, not declared ${objectFormat}.`)
-    if (commit !== requestedCommit) throw new Error('Git resolved a different commit than the submitted full object ID.')
+      try { await stat(cache) } catch { await run(['init', '--bare', `--object-format=${objectFormat}`, cache]) }
+      await run(['-C', cache, 'config', 'remote.origin.url', repository])
+      await run(['-C', cache, 'fetch', '--force', '--no-tags', '--depth=1', 'origin', revision], 4_000_000)
+      const commit = await run(['-C', cache, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}'])
+      const detectedFormat = await run(['-C', cache, 'rev-parse', '--show-object-format']) as 'sha1' | 'sha256'
+      if (detectedFormat !== objectFormat) throw new Error(`Repository uses ${detectedFormat}, not declared ${objectFormat}.`)
+      if (/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(revision) && commit !== revision) throw new Error('Git resolved a different commit than the submitted full object ID.')
 
-    const counts = await run(['-C', cache, 'count-objects', '-v'])
-    const packKilobytes = Number(counts.match(/^size-pack:\s*(\d+)$/m)?.[1] ?? 0)
-    if (packKilobytes * 1024 > this.config.gitMaxPackBytes) throw new Error('Fetched Git pack exceeds the configured size limit.')
+      const counts = await run(['-C', cache, 'count-objects', '-v'])
+      const packKilobytes = Number(counts.match(/^size-pack:\s*(\d+)$/m)?.[1] ?? 0)
+      if (packKilobytes * 1024 > this.config.gitMaxPackBytes) throw new Error('Fetched Git pack exceeds the configured size limit.')
 
-    const show = (path: string) => run(['-C', cache, 'show', `${commit}:${path}`], 512_000)
-    const manifestYaml = await show('.idea/manifest.yaml')
-    const manifest = parse(manifestYaml) as IdeaManifest
-    if (manifest?.spec_version !== '0.1' || typeof manifest.idea?.id !== 'string' || typeof manifest.idea?.name !== 'string') {
-      throw new Error('Historical .idea/manifest.yaml is not an IRAP 0.1 idea manifest.')
-    }
-    new URL(manifest.idea.id)
-    if (manifest.repository?.object_format !== objectFormat) throw new Error('Manifest object format differs from the repository.')
-    const verifiersPath = safeRepositoryPath(manifest.verification?.verifiers_path, '.idea/verifiers.yaml')
-    const policyPath = safeRepositoryPath(manifest.verification?.policy_path, '.idea/verification-policy.yaml')
-    const [verifiersYaml, policyYaml] = await Promise.all([show(verifiersPath), show(policyPath)])
-    parse(verifiersYaml)
-    parse(policyYaml)
-    return {
-      ideaId: manifest.idea.id,
-      ideaName: manifest.idea.name,
-      commit,
-      objectFormat: detectedFormat,
-      manifestYaml,
-      verifiersYaml,
-      policyYaml,
-    }
+      const show = (path: string) => run(['-C', cache, 'show', `${commit}:${path}`], 512_000)
+      const manifestYaml = await show('.idea/manifest.yaml')
+      const manifest = parse(manifestYaml) as IdeaManifest
+      if (manifest?.spec_version !== '0.1' || typeof manifest.idea?.id !== 'string' || typeof manifest.idea?.name !== 'string') {
+        throw new Error('Historical .idea/manifest.yaml is not an IRAP 0.1 idea manifest.')
+      }
+      new URL(manifest.idea.id)
+      if (manifest.repository?.object_format !== objectFormat) throw new Error('Manifest object format differs from the repository.')
+      if (typeof manifest.repository?.canonical_ref !== 'string') throw new Error('Historical manifest does not define repository.canonical_ref.')
+      const verifiersPath = safeRepositoryPath(manifest.verification?.verifiers_path, '.idea/verifiers.yaml')
+      const policyPath = safeRepositoryPath(manifest.verification?.policy_path, '.idea/verification-policy.yaml')
+      const [verifiersYaml, policyYaml] = await Promise.all([show(verifiersPath), show(policyPath)])
+      parse(verifiersYaml)
+      parse(policyYaml)
+      return {
+        ideaId: manifest.idea.id,
+        ideaName: manifest.idea.name,
+        commit,
+        objectFormat: detectedFormat,
+        manifestYaml,
+        verifiersYaml,
+        policyYaml,
+        canonicalRef: manifest.repository.canonical_ref,
+        sourceRevision: revision,
+      }
+    })
   }
 }

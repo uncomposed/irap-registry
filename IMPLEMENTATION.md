@@ -1,4 +1,4 @@
-# IRAP Publisher
+# IRAP Registry
 
 ## Product statement
 
@@ -20,7 +20,7 @@ Git and signed IRAP objects are authoritative. ActivityPub carries announcements
 - A Fediverse user follows the publisher and receives new idea announcements.
 - An operator audits followers, received activities, delivery state, and the actor's stable key material.
 
-## v0.2 implemented scope
+## v0.3 release-candidate scope
 
 ### Publishing
 
@@ -31,6 +31,18 @@ Git and signed IRAP objects are authoritative. ActivityPub carries announcements
 - SQLite persistence with WAL, foreign keys, and restricted file permissions.
 - Public JSON API and ActivityStreams `Document` representation.
 - Responsive directory, exact-state resolver, and publishing form.
+
+### Registry core
+
+- Rendering submission resolves a full branch/tag ref or full object ID and freezes the returned commit.
+- SHA-1 and SHA-256 bare Git caches are initialized in their declared object formats.
+- Historical manifest, verifier registry, and policy snapshots are stored separately from the current idea index.
+- Creator-hosted artifact URIs remain external; digest status is independently verified, mismatched, or explicitly unverified.
+- Signed IRAP 0.1 attestations are preserved raw and verified with Ed25519 over RFC 8785 canonical JSON.
+- Cryptographic validity, historical-policy eligibility, individual recognition, aggregate recognition, and disagreement remain distinct.
+- `any_one_pass`, `threshold`, and `all_groups` are the only supported recognition rules.
+- Live reader, rendering-registration, and external-signer attestation workflows.
+- Operator commands for canonical-ref sync, immutable-record re-verification, and consistent online backup.
 
 ### Federation
 
@@ -70,7 +82,7 @@ The Docker container binds to `127.0.0.1:8787` on the VPS. Caddy owns public TLS
 
 ## Explicit boundaries
 
-The current implementation is a deployable federation and canonical-publication MVP, not the complete IRAP registry described by the original product definition and not a general-purpose social network. It does not yet accept rendering or attestation submissions, evaluate recognition on the server, provide state-history endpoints, or expose moderation UI. It also omits multi-user accounts, public registration, media upload, comments/replies, likes, boosts, domain blocklists, RFC 9421 message signatures, and ActivityPub conformance-suite certification.
+The current implementation is a single-operator IRAP registry release candidate, not a general-purpose social network. Rendering creation is administrator-authorized; signed attestation publication is open but rate-limited. It does not provide multi-user accounts, public account registration, media upload, comments/replies, likes, boosts, moderation UI, domain blocklists, RFC 9421 message signatures, or ActivityPub conformance-suite certification. It uses SQLite intentionally for this single-node VPS; a multi-writer deployment would require a different database topology.
 
 Production Git resolution is intentionally read-only and narrow: HTTPS only, no credentials, no redirects, no private/reserved targets, a hookless bare cache, no submodule traversal, a fetch timeout and pack-size ceiling, and `git show <commit>:<path>` for metadata. Development mode leaves this verification off by default so the interface can be explored offline; every API record exposes `git_verified` so the two states cannot be confused.
 
@@ -80,13 +92,15 @@ Production Git resolution is intentionally read-only and narrow: HTTPS only, no 
 - Tamper with a signed request body to falsify its digest/signature.
 - Attempt short hashes, malformed YAML, duplicate slugs, and missing administrator tokens.
 - Attempt remote actor URLs that resolve privately or redirect.
+- Advance a branch after registering a rendering and prove the rendering and its policy commit remain unchanged.
+- Submit recognized, valid-but-ineligible, and invalid attestations and prove all remain visible.
+- Fetch artifact bytes that match, mismatch, redirect, or exceed the size limit and prove their states remain distinct.
 - Stop a recipient server and inspect retry/backoff state.
-- Back up and restore the SQLite volume; the actor public key must remain unchanged.
+- Back up and restore the SQLite volume; the actor public key and raw signed records must remain unchanged.
 
 ## Next increments
 
-1. Persistent rendering and attestation publication APIs using the existing verification engine.
-2. Historical state and recognition endpoints from the original product definition.
-3. Moderation controls, domain allow/block policy, and administrative audit UI.
-4. RFC 9421 verification alongside the compatibility Signature header.
-5. Interoperability testing against Mastodon, GoToSocial, Akkoma, and an ActivityPub test suite.
+1. Moderation controls, domain allow/block policy, and administrative audit UI.
+2. Optional authenticated multi-operator accounts if operational need emerges.
+3. RFC 9421 verification alongside the compatibility Signature header.
+4. Interoperability testing against Mastodon, GoToSocial, Akkoma, and an ActivityPub test suite.

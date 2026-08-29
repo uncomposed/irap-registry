@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { canonicalize } from './domain/canonicalize'
 
 type ServiceInfo = {
   actor: string
@@ -18,6 +19,23 @@ export type PublishedIdea = {
   git_verified: boolean
   created_at: string
   updated_at: string
+}
+
+type IdeaDetail = PublishedIdea & {
+  states: Array<{ id: string; repository: string; object_format: string; commit: string; source_revision: string; resolved_at: string }>
+  renderings: Array<{ id: string; uri: string; title: string | null; artifact_uri: string; artifact_digest: string; digest_verified: boolean; digest_status: 'verified' | 'mismatch' | 'unverified'; status: string; submitted_at: string }>
+}
+
+type RenderingDetail = {
+  id: string
+  uri: string
+  document: { rendering: { title?: string; description?: string; artifact: { uri: string; digest: string }; renders: { idea_id: string; git: { repository: string; object_format: string; commit: string } }; creator: { id: string } } }
+  status: string
+  digest_verified: boolean
+  digest_status: 'verified' | 'mismatch' | 'unverified'
+  historical_state: { commit: string; source_revision: string; policy: unknown }
+  recognition: Record<string, { recognized: boolean; qualifying_verifier_ids: string[]; disagreement: boolean; attestation_count: number }>
+  attestations: Array<{ id: string; uri: string; verifier_id: string; claim: string; result: string; signature_valid: boolean; recognition_status: string; recognition_reasons: string[]; issued_at: string }>
 }
 
 type IconName = 'globe' | 'git' | 'broadcast' | 'plus' | 'arrow' | 'file' | 'lock' | 'check' | 'alert'
@@ -71,9 +89,45 @@ function usePublisherData(refresh = 0) {
 export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
   const [refresh] = useState(0)
   const { info, ideas, state } = usePublisherData(refresh)
-  const requestedSlug = useMemo(() => new URLSearchParams(window.location.search).get('idea'), [])
+  const requestedSlug = useMemo(() => new URLSearchParams(window.location.search).get('idea') ?? window.location.pathname.match(/^\/ideas\/([^/]+)/)?.[1] ?? null, [])
+  const requestedRenderingId = useMemo(() => window.location.pathname.match(/^\/renderings\/([^/]+)/)?.[1] ?? null, [])
   const [selected, setSelected] = useState<string | null>(requestedSlug)
-  const selectedIdea = ideas.find((idea) => idea.slug === selected)
+  const [detail, setDetail] = useState<IdeaDetail | null>(null)
+  const [rendering, setRendering] = useState<RenderingDetail | null>(null)
+  const selectedIdea = detail ?? ideas.find((idea) => idea.slug === selected)
+
+  useEffect(() => {
+    if (!selected) {
+      setDetail(null)
+      setRendering(null)
+      return
+    }
+    const controller = new AbortController()
+    fetch(`/api/v1/ideas/${encodeURIComponent(selected)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<IdeaDetail> : Promise.reject(new Error('Idea unavailable')))
+      .then((value) => setDetail(value))
+      .catch((error) => { if ((error as Error).name !== 'AbortError') setDetail(null) })
+    return () => controller.abort()
+  }, [selected])
+
+  useEffect(() => {
+    if (!requestedRenderingId || ideas.length === 0) return
+    const controller = new AbortController()
+    fetch(`/api/v1/renderings/${encodeURIComponent(requestedRenderingId)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<RenderingDetail> : Promise.reject(new Error('Rendering unavailable')))
+      .then((value) => {
+        setRendering(value)
+        const idea = ideas.find((entry) => entry.id === value.document.rendering.renders.idea_id)
+        if (idea) setSelected(idea.slug)
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [ideas, requestedRenderingId])
+
+  async function selectRendering(id: string) {
+    const response = await fetch(`/api/v1/renderings/${encodeURIComponent(id)}`)
+    if (response.ok) setRendering(await response.json() as RenderingDetail)
+  }
 
   return (
     <>
@@ -89,7 +143,7 @@ export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
         </div>
         <div className="federation-card">
           <div className="federation-orbit"><span className="orbit-center"><Icon name="broadcast" size={25}/></span><i/><i/><i/></div>
-          <div><span>Network status</span><strong>{state === 'ready' && info?.federation ? 'Federation ready' : state === 'offline' ? 'Service offline' : 'Connecting'}</strong><small>{info ? 'WebFinger · signed inbox · public outbox' : 'Waiting for the IRAP service'}</small></div>
+          <div><span>Network status</span><strong>{state === 'ready' ? info?.federation ? 'Federation ready' : 'Registry ready · federation off' : state === 'offline' ? 'Service offline' : 'Connecting'}</strong><small>{info ? info.federation ? 'WebFinger · signed inbox · public outbox' : 'Local registry API and historical verification' : 'Waiting for the IRAP service'}</small></div>
         </div>
       </section>
 
@@ -109,7 +163,7 @@ export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
           <div className="idea-layout">
             <div className="idea-list">
               {ideas.map((idea, index) => (
-                <button className={`idea-card ${selected === idea.slug ? 'selected' : ''}`} key={idea.id} onClick={() => setSelected(idea.slug)}>
+                <button className={`idea-card ${selected === idea.slug ? 'selected' : ''}`} key={idea.id} onClick={() => { setRendering(null); setSelected(idea.slug) }}>
                   <span className="idea-index">{String(index + 1).padStart(2, '0')}</span>
                   <div className="idea-card-copy"><span className="idea-protocol">IRAP · {idea.git_commit.algorithm.toUpperCase()} · {idea.git_verified ? 'Git verified' : 'Development record'}</span><h2>{idea.name}</h2><p>{idea.summary}</p><div><span><Icon name="git" size={13}/><code>{shortHash(idea.git_commit.value)}</code></span><span>{new Date(idea.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div></div>
                   <Icon name="arrow" size={17}/>
@@ -120,6 +174,30 @@ export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
               {selectedIdea ? <>
                 <span className="detail-label">Resolved idea</span><h2>{selectedIdea.name}</h2><p>{selectedIdea.summary}</p>
                 <dl><div><dt>Idea ID</dt><dd>{selectedIdea.id}</dd></div><div><dt>Repository</dt><dd>{selectedIdea.repository}</dd></div><div><dt>State proof</dt><dd>{selectedIdea.git_verified ? 'Fetched and resolved from Git' : 'Not fetched in development mode'}</dd></div><div><dt>Object format</dt><dd>{selectedIdea.git_commit.algorithm.toUpperCase()}</dd></div><div><dt>Exact commit</dt><dd><code>{selectedIdea.git_commit.value}</code></dd></div></dl>
+                {detail && <section className="registry-renderings">
+                  <div className="registry-section-title"><span>Registered renderings</span><strong>{detail.renderings.length}</strong></div>
+                  {detail.renderings.length === 0 ? <p className="registry-empty">No external artifact has been registered against this idea yet.</p> : detail.renderings.map((entry) => (
+                    <button key={entry.id} className={rendering?.id === entry.id ? 'active' : ''} onClick={() => void selectRendering(entry.id)}>
+                      <span><strong>{entry.title ?? 'Untitled rendering'}</strong><small>{entry.digest_status === 'verified' ? 'Digest independently verified' : entry.digest_status === 'mismatch' ? 'Severe: artifact digest mismatch' : 'Submitter-supplied digest'}</small></span><Icon name="arrow" size={14}/>
+                    </button>
+                  ))}
+                </section>}
+                {rendering && <section className="registry-rendering-detail">
+                  <span className="detail-label">Rendering evidence</span>
+                  <h3>{rendering.document.rendering.title ?? 'Untitled rendering'}</h3>
+                  {rendering.document.rendering.description && <p>{rendering.document.rendering.description}</p>}
+                  <div className="registry-state-label"><Icon name="git" size={14}/>{rendering.historical_state.commit === selectedIdea.git_commit.value ? 'Current target' : 'Historical target'} · <code>{shortHash(rendering.historical_state.commit)}</code></div>
+                  <a href={rendering.document.rendering.artifact.uri} target="_blank" rel="noreferrer">Open creator-hosted artifact <Icon name="arrow" size={13}/></a>
+                  {rendering.digest_status !== 'verified' && <div className={`digest-warning ${rendering.digest_status === 'mismatch' ? 'digest-mismatch' : ''}`}><Icon name="alert" size={15}/><span>{rendering.digest_status === 'mismatch' ? 'SEVERE: fetched artifact bytes do not match the bound digest.' : 'Digest recorded but not independently fetched.'}</span></div>}
+                  {Object.entries(rendering.recognition).map(([claim, result]) => <div className="recognition-summary" key={claim}>
+                    <span className={result.recognized ? 'recognized' : 'pending'}><Icon name={result.recognized ? 'check' : 'alert'} size={14}/>{result.recognized ? 'Recognized' : 'Not recognized'}</span>
+                    <strong>{claim.replaceAll('_', ' ')}</strong>
+                    <small>{result.attestation_count} attestations · {result.disagreement ? 'disagreement visible' : 'no recognized disagreement'}</small>
+                    {result.qualifying_verifier_ids.map((id) => <code key={id}>{id}</code>)}
+                  </div>)}
+                  <div className="registry-attestations">{rendering.attestations.map((entry) => <details key={entry.id}><summary><span>{entry.verifier_id}</span><b className={`attestation-${entry.recognition_status}`}>{entry.result} · {entry.recognition_status}</b></summary><p>Signature {entry.signature_valid ? 'valid' : 'not verified'} · {new Date(entry.issued_at).toLocaleString()}</p>{entry.recognition_reasons.map((reason) => <small key={reason}>{reason}</small>)}</details>)}</div>
+                  <p className="fidelity-note">Recognition is an attributable judgment of fidelity—not truth, endorsement, or quality.</p>
+                </section>}
                 <details><summary>View published specification</summary><pre>{selectedIdea.spec_yaml}</pre></details>
                 <div className="federated-note"><Icon name="broadcast" size={17}/><p>Available as an ActivityStreams <strong>Document</strong> in this publisher’s public outbox.</p></div>
               </> : <div className="detail-placeholder"><Icon name="file" size={28}/><p>Select an idea to resolve its exact state and published specification.</p></div>}
@@ -194,4 +272,141 @@ export function PublishIdea({ onPublished, onCancel }: { onPublished: (idea: Pub
       </form>
     </main>
   )
+}
+
+export function SubmitRendering({ onCancel }: { onCancel: () => void }) {
+  const { ideas, state } = usePublisherData()
+  const [token, setToken] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<{ id: string; uri: string; state: { commit: string; source_revision: string }; digest_verified: boolean } | null>(null)
+  const [form, setForm] = useState({ idea_slug: '', title: '', description: '', artifact_uri: '', digest: '', repository: '', object_format: 'sha1', revision: 'refs/heads/main', creator: '' })
+  const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }))
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setSubmitting(true)
+    setError('')
+    try {
+      const response = await fetch('/api/v1/renderings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          idea_slug: form.idea_slug, title: form.title || undefined, description: form.description || undefined,
+          artifact: { uri: form.artifact_uri, digest: form.digest },
+          target: { repository: form.repository, object_format: form.object_format, revision: form.revision },
+          creator: { id: form.creator },
+        }),
+      })
+      const body = await response.json() as typeof result & { error?: string; issues?: Array<{ path: string[]; message: string }> }
+      if (!response.ok || !body) throw new Error(body?.issues?.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(' · ') || body?.error || 'Rendering submission failed.')
+      setResult(body)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Rendering submission failed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (result) return <main className="publish-success page-shell"><span className="success-mark"><Icon name="check" size={30}/></span><span className="kicker dark">Rendering registered</span><h1>Target frozen.</h1><p>The external artifact is permanently bound to the resolved Git commit. Its digest remains visibly submitter-supplied until independently fetched.</p><div><span>Requested target</span><code>{result.state.source_revision}</code><span>Frozen commit</span><code>{result.state.commit}</code></div><button className="primary-action dark" onClick={onCancel}>Return to ideas <Icon name="arrow" size={16}/></button></main>
+
+  return <main className="publish-page page-shell">
+    <div className="publish-intro"><span className="kicker dark">Register an external artifact</span><h1>Freeze the<br/><em>relationship.</em></h1><p>The artifact stays with its creator. This registry resolves the requested branch, tag, or commit and records the resulting full Git object ID.</p><div className="publish-boundary"><Icon name="lock" size={19}/><p><strong>No repository code runs.</strong> The service uses a hookless bare cache and reads only the historical IRAP metadata.</p></div></div>
+    <form className="publish-form" onSubmit={submit}>
+      <div className="form-section-heading"><span>01</span><div><h2>Idea and artifact</h2><p>Choose the idea and bind the creator-hosted bytes</p></div></div>
+      <label><span>Idea</span><select required value={form.idea_slug} onChange={(event) => update('idea_slug', event.target.value)}><option value="">{state === 'loading' ? 'Loading ideas…' : 'Select a published idea'}</option>{ideas.map((idea) => <option value={idea.slug} key={idea.id}>{idea.name}</option>)}</select></label>
+      <label><span>Title</span><input required maxLength={240} value={form.title} onChange={(event) => update('title', event.target.value)} /></label>
+      <label><span>Description</span><textarea rows={3} maxLength={4000} value={form.description} onChange={(event) => update('description', event.target.value)} /></label>
+      <label><span>Artifact URI</span><input required type="url" value={form.artifact_uri} onChange={(event) => update('artifact_uri', event.target.value)} placeholder="https://creator.example/artifact" /></label>
+      <label><span>Artifact digest</span><input required pattern="sha256:[0-9a-f]{64}" value={form.digest} onChange={(event) => update('digest', event.target.value)} placeholder="sha256: followed by 64 lowercase hex characters" /></label>
+      <label><span>Creator identity</span><input required value={form.creator} onChange={(event) => update('creator', event.target.value)} placeholder="https://creator.example/#me or did:key:…" /></label>
+      <div className="form-section-heading"><span>02</span><div><h2>Git target</h2><p>A moving input that will be frozen on submission</p></div></div>
+      <label><span>Repository URL</span><input required type="url" value={form.repository} onChange={(event) => update('repository', event.target.value)} placeholder="https://codeberg.org/owner/idea.git" /></label>
+      <div className="commit-inputs"><label><span>Object format</span><select value={form.object_format} onChange={(event) => update('object_format', event.target.value)}><option value="sha1">SHA-1</option><option value="sha256">SHA-256</option></select></label><label><span>Branch, tag, or commit</span><input required value={form.revision} onChange={(event) => update('revision', event.target.value)} placeholder="refs/heads/main" /></label></div>
+      <div className="form-section-heading"><span>03</span><div><h2>Authorization</h2><p>Registry administration</p></div></div>
+      <label><span>Administrator token</span><input required type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} /></label>
+      {error && <div className="publish-error" role="alert"><Icon name="alert" size={17}/><p>{error}</p></div>}
+      <div className="form-actions"><button type="button" className="secondary-action" onClick={onCancel}>Cancel</button><button type="submit" className="primary-action dark" disabled={submitting}>{submitting ? 'Resolving Git…' : 'Resolve and register'} <Icon name="git" size={16}/></button></div>
+    </form>
+  </main>
+}
+
+type VerificationPreview = { signature_valid: boolean; recognized: boolean; recognition_status: string; recognition_reasons: string[]; policy_commit: string; canonical_unsigned_json: string }
+
+const attestationTemplate = JSON.stringify({
+  irap_version: '0.1',
+  attestation: {
+    id: 'https://reviewer.example/attestations/replace-me',
+    rendering: { id: 'https://publisher.example/renderings/replace-me', artifact_digest: `sha256:${'0'.repeat(64)}` },
+    against: { idea_id: 'https://ideas.example/replace-me', git: { repository: 'https://codeberg.org/owner/idea.git', object_format: 'sha1', commit: '0'.repeat(40) } },
+    verifier: { id: 'https://reviewer.example/#me', key_id: 'reviewer-ed25519-key' },
+    judgment: { claim: 'faithful_rendering', result: 'pass', note: 'Explain the attributable judgment.' },
+    evidence: [], issued_at: '2026-08-29T20:00:00Z',
+    signature: { algorithm: 'Ed25519', canonicalization: 'RFC8785-JCS', value: 'replace-with-base64url-signature' },
+  },
+}, null, 2)
+
+export function SubmitAttestation({ onCancel }: { onCancel: () => void }) {
+  const [document, setDocument] = useState(attestationTemplate)
+  const [preview, setPreview] = useState<VerificationPreview | null>(null)
+  const [previewSource, setPreviewSource] = useState('')
+  const [error, setError] = useState('')
+  const [published, setPublished] = useState<{ id: string; uri: string } | null>(null)
+  const canonicalPayload = useMemo(() => {
+    try {
+      const parsed = JSON.parse(document) as { attestation?: Record<string, unknown> }
+      if (!parsed.attestation) return ''
+      const { signature: _signature, ...unsignedAttestation } = parsed.attestation
+      return canonicalize({ ...parsed, attestation: unsignedAttestation })
+    } catch { return '' }
+  }, [document])
+
+  useEffect(() => {
+    const attestationId = window.location.pathname.match(/^\/attestations\/([^/]+)/)?.[1]
+    const renderingId = window.location.pathname.match(/^\/review\/([^/]+)/)?.[1]
+    const controller = new AbortController()
+    if (attestationId) {
+      fetch(`/api/v1/attestations/${encodeURIComponent(attestationId)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<{ document: unknown }> : Promise.reject(new Error('Attestation unavailable')))
+        .then((value) => setDocument(JSON.stringify(value.document, null, 2)))
+        .catch(() => {})
+    } else if (renderingId) {
+      fetch(`/api/v1/renderings/${encodeURIComponent(renderingId)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<RenderingDetail> : Promise.reject(new Error('Rendering unavailable')))
+        .then((value) => {
+          const rendered = value.document.rendering
+          const template = JSON.parse(attestationTemplate) as { attestation: Record<string, unknown> & { rendering: unknown; against: unknown } }
+          template.attestation.rendering = { id: value.uri, artifact_digest: rendered.artifact.digest }
+          template.attestation.against = { idea_id: rendered.renders.idea_id, git: rendered.renders.git }
+          setDocument(JSON.stringify(template, null, 2))
+        })
+        .catch(() => {})
+    }
+    return () => controller.abort()
+  }, [])
+
+  async function send(path: string) {
+    setError('')
+    try {
+      const payload = JSON.parse(document)
+      const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+      const body = await response.json() as VerificationPreview & { id?: string; uri?: string; verification?: VerificationPreview; error?: string; issues?: Array<{ path: string[]; message: string }> }
+      if (!response.ok) throw new Error(body.issues?.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(' · ') || body.error || 'Attestation request failed.')
+      if (path.endsWith('/verify')) { setPreview(body); setPreviewSource(document) }
+      else if (body.id && body.uri) setPublished({ id: body.id, uri: body.uri })
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Attestation request failed.') }
+  }
+
+  if (published) return <main className="publish-success page-shell"><span className="success-mark"><Icon name="check" size={30}/></span><span className="kicker dark">Attestation published</span><h1>Judgment preserved.</h1><p>The raw signed object and its separate cryptographic and recognition results are stored and federated.</p><div><span>Registry record</span><code>{published.id}</code><span>Attestation URI</span><code>{published.uri}</code></div><button className="primary-action dark" onClick={onCancel}>Return to ideas <Icon name="arrow" size={16}/></button></main>
+
+  return <main className="attestation-page page-shell">
+    <section className="attestation-intro"><span className="kicker dark">External-signer workflow</span><h1>Inspect. Sign.<br/><em>Then publish.</em></h1><p>The registry never asks for a verifier private key. Prepare the document, sign the exact canonical payload externally, replace the signature value, and verify before publication.</p><div className="fidelity-note">A valid or recognized attestation is attributable fidelity evidence—not truth, endorsement, or quality.</div></section>
+    <section className="attestation-workbench">
+      <label><span>IRAP attestation JSON</span><textarea className="yaml-input" rows={24} spellCheck={false} value={document} onChange={(event) => { setDocument(event.target.value); setPreview(null) }} /></label>
+      <div className="canonical-panel"><div><span>RFC 8785 signing payload</span><button type="button" disabled={!canonicalPayload} onClick={() => void navigator.clipboard.writeText(canonicalPayload)}>Copy payload</button></div><pre>{canonicalPayload || 'Enter a valid attestation JSON document to derive its unsigned canonical payload.'}</pre></div>
+      {preview && <div className={`verification-preview preview-${preview.recognition_status}`}><strong>{preview.signature_valid ? 'Signature valid' : 'Signature not verified'} · {preview.recognition_status}</strong><span>Policy commit <code>{shortHash(preview.policy_commit)}</code></span>{preview.recognition_reasons.map((reason) => <p key={reason}>{reason}</p>)}</div>}
+      {error && <div className="publish-error" role="alert"><Icon name="alert" size={17}/><p>{error}</p></div>}
+      <div className="form-actions"><button className="secondary-action" type="button" onClick={onCancel}>Cancel</button><button className="secondary-action" type="button" onClick={() => void send('/api/v1/attestations/verify')}>Verify without publishing</button><button className="primary-action dark" type="button" disabled={!preview || previewSource !== document} onClick={() => void send('/api/v1/attestations')}>Publish unchanged record <Icon name="broadcast" size={16}/></button></div>
+    </section>
+  </main>
 }

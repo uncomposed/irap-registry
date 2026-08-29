@@ -5,9 +5,19 @@ import specText from '../SPEC.yaml?raw'
 import { attestations, ideaState, policy, rendering, verifierRegistry } from './data/demo'
 import { evaluateRendering } from './domain/verification'
 import type { AttestationEvaluation, RenderingEvaluation } from './domain/types'
-import { IdeaDirectory, PublishIdea } from './Publisher'
+import { IdeaDirectory, PublishIdea, SubmitAttestation, SubmitRendering } from './Publisher'
 
-type View = 'ideas' | 'explorer' | 'protocol' | 'acceptance' | 'publish'
+type View = 'ideas' | 'explorer' | 'submit' | 'review' | 'protocol' | 'acceptance' | 'publish'
+
+function initialView(): View {
+  const path = window.location.pathname
+  if (path === '/submit') return 'submit'
+  if (path === '/review' || path.startsWith('/review/') || path.startsWith('/attestations/')) return 'review'
+  if (path === '/about') return 'protocol'
+  if (path === '/acceptance') return 'acceptance'
+  if (path === '/demo') return 'explorer'
+  return 'ideas'
+}
 
 const statusCopy = {
   'recognized-pass': { label: 'Recognized pass', icon: 'check' },
@@ -68,9 +78,9 @@ function Header({ view, setView }: { view: View; setView: (view: View) => void }
       </button>
       <button className="mobile-menu" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle navigation"><Icon name="menu" /></button>
       <nav className={open ? 'nav-open' : ''} aria-label="Primary">
-        {(['ideas', 'explorer', 'protocol', 'acceptance', 'publish'] as View[]).map((item) => (
+        {(['ideas', 'submit', 'review', 'explorer', 'protocol', 'acceptance', 'publish'] as View[]).map((item) => (
           <button key={item} className={view === item ? 'active' : ''} onClick={() => navigate(item)}>
-            {item === 'ideas' ? 'Ideas' : item === 'publish' ? 'Publish' : item[0].toUpperCase() + item.slice(1)}
+            {item === 'ideas' ? 'Ideas' : item === 'submit' ? 'Add rendering' : item === 'review' ? 'Attest' : item === 'explorer' ? 'Demo' : item === 'publish' ? 'Publish idea' : item[0].toUpperCase() + item.slice(1)}
           </button>
         ))}
       </nav>
@@ -245,7 +255,7 @@ function AcceptanceView() {
   const criteria = useMemo(() => implementationAcceptanceText.split('\n').filter((line) => line.startsWith('- **A')), [])
   return (
     <main className="document-page page-shell">
-      <span className="kicker dark">Auditable completion · 16 checks</span>
+      <span className="kicker dark">Auditable completion · {criteria.length} checks</span>
       <h1>What “done” means.</h1>
       <p className="document-lede">Every recommendation has an observable evidence path and a prior failure mode it is designed to catch.</p>
       <div className="acceptance-grid">{criteria.map((criterion) => {
@@ -264,7 +274,7 @@ function LoadingState() {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('ideas')
+  const [view, setView] = useState<View>(initialView)
   const [evaluation, setEvaluation] = useState<RenderingEvaluation | null>(null)
 
   useEffect(() => {
@@ -282,6 +292,8 @@ export default function App() {
       <Header view={view} setView={setView} />
       {view === 'ideas' ? <IdeaDirectory onPublish={() => setView('publish')} />
         : view === 'publish' ? <PublishIdea onPublished={() => setView('ideas')} onCancel={() => setView('ideas')} />
+        : view === 'submit' ? <SubmitRendering onCancel={() => setView('ideas')} />
+        : view === 'review' ? <SubmitAttestation onCancel={() => setView('ideas')} />
         : view === 'explorer' ? (evaluation ? <Explorer evaluation={evaluation} /> : <LoadingState />)
         : view === 'protocol' ? <ProtocolView /> : <AcceptanceView />}
       <footer><div><span className="brand-mark small"><Icon name="mark" size={19} /></span><strong>IRAP 0.1</strong><span>Forge-agnostic · federation-optional</span></div><div className="implementation-commit">Implements commit <code>{__IRAP_IMPLEMENTATION_COMMIT__}</code></div></footer>

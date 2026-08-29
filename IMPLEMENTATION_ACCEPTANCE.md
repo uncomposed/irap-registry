@@ -1,4 +1,4 @@
-# IRAP Publisher v0.2 acceptance criteria
+# IRAP Registry v0.3 release-candidate acceptance criteria
 
 Each criterion includes observable evidence and a failure it is designed to catch.
 
@@ -40,6 +40,13 @@ Each criterion includes observable evidence and a failure it is designed to catc
 - **A25 — Stable identity:** actor RSA keys survive service restart and are stored with the same durable volume as federation state. Catches a new cryptographic identity on every deploy.
 - **A26 — Deployment boundary:** the container drops Linux capabilities, runs as a non-root user, exposes only loopback through Compose, and relies on Caddy for public TLS. Catches accidental direct service exposure.
 - **A27 — Historical Git proof:** production publication fetches the submitted full commit into a hookless bare cache, confirms the object format and exact commit, and reads the manifest, verifier registry, and policy from that commit. The public record exposes whether this proof occurred. Catches a repository URL and hash being treated as evidence without resolution.
+- **A28 — Branch freeze:** rendering submission may name a full heads/tags ref, but the stored rendering and every later attestation contain only the resolved full commit. Advancing the ref does not rewrite the target. Catches moving branches masquerading as identity.
+- **A29 — Historical recognition:** Ed25519 signatures are checked over the RFC 8785 projection, then eligibility and the recognition rule are loaded from the rendering's exact state snapshot. Catches current policy being applied retroactively.
+- **A30 — Visible disagreement:** recognized, valid-but-ineligible, invalid, fail, abstain, and indeterminate records remain queryable and visible independently. Catches a summary badge erasing evidence.
+- **A31 — Artifact integrity states:** creator-hosted bytes are streamed through timeout and size bounds without redirects; matching, mismatching, and unfetched digests are separate states, and mismatch is a severe warning. Catches locator trust replacing content identity.
+- **A32 — Hash-family execution:** automated smart-HTTP fixtures resolve both SHA-1 and SHA-256 repositories with correctly formatted bare caches. Catches nominal SHA-256 support that fails at fetch time.
+- **A33 — Raw-record preservation:** `verify-all` changes only derived verification columns; raw rendering and attestation JSON remain unchanged. Catches audit history being rewritten during recomputation.
+- **A34 — Release boundary:** deployment starts only from a clean Git commit after tests, build, audit, Compose validation, Docker build, and read-only VPS discovery. Caddy is never edited without inspecting the live file. Catches an unauditable ad-hoc push.
 
 ## Quality gate
 
@@ -50,7 +57,7 @@ npm test
 npm run build
 ```
 
-Stopping rule: do not call v0.2 deployable if any automated test, server compilation, web build, container build, discovery endpoint, publication transaction, or signed-transport falsification test fails.
+Stopping rule: do not call v0.3 ready for VPS transfer if any automated test, server compilation, web build, container build, discovery endpoint, publication transaction, historical-policy falsification, artifact-boundary test, backup/restore check, or signed-transport falsification fails.
 
 ## Omission and falsification checks
 

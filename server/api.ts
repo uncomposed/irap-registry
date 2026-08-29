@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { ServiceConfig } from './config.js'
 import { serviceUrls } from './config.js'
-import type { IdeaRow } from './database.js'
+import type { IdeaRow, IdeaStateRow, RenderingRow } from './database.js'
 import { FederationService } from './federation.js'
 import { createIdeaActivity } from './activitypub.js'
 import { ideaInputSchema } from './irap.js'
@@ -17,9 +17,36 @@ function authorized(request: FastifyRequest, config: ServiceConfig) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected)
 }
 
-function requireAdmin(config: ServiceConfig) {
+export function requireAdmin(config: ServiceConfig) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!authorized(request, config)) return reply.code(401).header('www-authenticate', 'Bearer realm="IRAP publisher"').send({ error: 'A valid administrator token is required.' })
+  }
+}
+
+function publicIdeaDetail(db: Database.Database, row: IdeaRow) {
+  const states = db.prepare('SELECT * FROM idea_states WHERE idea_id = ? ORDER BY resolved_at DESC').all(row.idea_id) as IdeaStateRow[]
+  const renderings = db.prepare('SELECT * FROM renderings WHERE idea_id = ? ORDER BY submitted_at DESC').all(row.idea_id) as RenderingRow[]
+  return {
+    ...publicIdea(row),
+    states: states.map((state) => ({
+      id: state.id,
+      repository: state.repository,
+      object_format: state.object_format,
+      commit: state.commit_value,
+      source_revision: state.source_revision,
+      resolved_at: state.resolved_at,
+    })),
+    renderings: renderings.map((rendering) => ({
+      id: rendering.id,
+      uri: rendering.rendering_uri,
+      title: rendering.title,
+      artifact_uri: rendering.artifact_uri,
+      artifact_digest: rendering.artifact_digest,
+      digest_verified: rendering.digest_verified === 1,
+      digest_status: rendering.digest_verified === 1 ? 'verified' : rendering.digest_verified === -1 ? 'mismatch' : 'unverified',
+      status: rendering.status,
+      submitted_at: rendering.submitted_at,
+    })),
   }
 }
 
@@ -54,11 +81,11 @@ export function registerApi(app: FastifyInstance, config: ServiceConfig, db: Dat
 
   app.get('/api/ideas/:slug', async (request, reply) => {
     const row = db.prepare('SELECT * FROM ideas WHERE slug = ?').get((request.params as { slug: string }).slug) as IdeaRow | undefined
-    return row ? publicIdea(row) : reply.code(404).send({ error: 'Idea not found.' })
+    return row ? publicIdeaDetail(db, row) : reply.code(404).send({ error: 'Idea not found.' })
   })
   app.get('/api/v1/ideas/:slug', async (request, reply) => {
     const row = db.prepare('SELECT * FROM ideas WHERE slug = ?').get((request.params as { slug: string }).slug) as IdeaRow | undefined
-    return row ? publicIdea(row) : reply.code(404).send({ error: 'Idea not found.' })
+    return row ? publicIdeaDetail(db, row) : reply.code(404).send({ error: 'Idea not found.' })
   })
 
   app.post('/api/ideas', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, preHandler: requireAdmin(config) }, async (request, reply) => {
@@ -100,6 +127,12 @@ export function registerApi(app: FastifyInstance, config: ServiceConfig, db: Dat
           VALUES (@id, @slug, @idea_id, @name, @summary, @repository, @commit_algorithm, @commit_value, @spec_yaml, @git_verified, @manifest_yaml, @verifiers_yaml, @policy_yaml, @created_at, @updated_at)`).run(row)
         db.prepare(`INSERT INTO activities (id, type, object_id, body_json, public, published_at) VALUES (?, ?, ?, ?, 1, ?)`).run(
           activity.id, activity.type, activity.object.id, JSON.stringify(activity), now,
+        )
+        if (resolved) db.prepare(`INSERT OR IGNORE INTO idea_states
+          (id, idea_id, repository, object_format, commit_value, source_revision, manifest_yaml, verifiers_yaml, policy_yaml, resolved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+          randomUUID(), resolved.ideaId, input.repository, resolved.objectFormat, resolved.commit, resolved.sourceRevision,
+          resolved.manifestYaml, resolved.verifiersYaml, resolved.policyYaml, now,
         )
       })()
     } catch (error) {

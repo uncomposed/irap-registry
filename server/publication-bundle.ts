@@ -90,6 +90,18 @@ function fullCommit(value: string, objectFormat: 'sha1' | 'sha256') {
   return (objectFormat === 'sha1' ? /^[0-9a-f]{40}$/ : /^[0-9a-f]{64}$/).test(value)
 }
 
+function specificationIdentity(value: Record<string, unknown>) {
+  for (const key of ['idea', 'idea_model', 'protocol'] as const) {
+    const candidate = value[key]
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+    const identity = candidate as Record<string, unknown>
+    if (typeof identity.name === 'string') {
+      return { id: typeof identity.id === 'string' ? identity.id : null, name: identity.name }
+    }
+  }
+  return null
+}
+
 function renderingSubmission(slug: string, document: RenderingDocument): RenderingSubmission {
   const rendering = document.rendering
   return {
@@ -122,8 +134,8 @@ export async function loadPublicationBundle(
   if (ideaState.commit !== state.commit) throw new Error('Idea state resolved to a different commit.')
   const stateFiles = await resolver.readFiles(state.repository, state.object_format, state.commit, [bundle.idea.specification_path])
   const specYaml = stateFiles.files[bundle.idea.specification_path]
-  const specification = parseYamlMapping(specYaml, bundle.idea.specification_path) as { idea?: { id?: unknown; name?: unknown } }
-  if (specification.idea?.id !== ideaState.ideaId || specification.idea?.name !== ideaState.ideaName) {
+  const specification = specificationIdentity(parseYamlMapping(specYaml, bundle.idea.specification_path))
+  if (!specification || (specification.id !== null && specification.id !== ideaState.ideaId) || specification.name !== ideaState.ideaName) {
     throw new Error(`${bundle.idea.specification_path} identity differs from the historical idea manifest.`)
   }
 

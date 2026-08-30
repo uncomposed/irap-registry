@@ -105,6 +105,16 @@ describe('publication bundles', () => {
       .rejects.toThrow('identity differs from the historical idea manifest')
   })
 
+  it.each([
+    ['idea_model', 'idea_model:\n  version: "0.1"\n  name: Example Idea\n'],
+    ['protocol', 'protocol:\n  id: https://publisher.example/ideas/example-idea\n  name: Example Idea\n'],
+  ])('accepts the %s identity shape used by an existing canonical model', async (_shape, specification) => {
+    const input = fixture()
+    input.files['public/idea.yaml'] = specification
+    const loaded = await loadPublicationBundle(config(), input.resolver, input.source, async () => ({ status: 'verified', computed_digest: artifactDigest }))
+    expect(loaded.specYaml).toBe(specification)
+  })
+
   it('plans create, detects idempotent existing records, and refuses equivocation', async () => {
     const runtime = config()
     const input = fixture()

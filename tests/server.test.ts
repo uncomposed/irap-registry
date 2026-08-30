@@ -382,6 +382,7 @@ describe('artifact retrieval boundary', () => {
       { document: { rendering: { live_uri: 'https://rendering.example/live' } }, expected: { uri: 'https://rendering.example/live', source: 'live' } },
       { document: { product: { entry_url: 'https://rendering.example/entry' } }, expected: { uri: 'https://rendering.example/entry', source: 'live' } },
       { document: { live_url: 'https://rendering.example/root' }, expected: { uri: 'https://rendering.example/root', source: 'live' } },
+      { document: { rendering: { planned_human_uri: 'https://rendering.example/deployed-plan' } }, expected: { uri: 'https://rendering.example/deployed-plan', source: 'live' } },
       { document: { source: { repository: 'https://github.com/example/rendering.git' } }, expected: { uri: 'https://github.com/example/rendering', source: 'repository' } },
     ]
     for (const { document, expected } of cases) {

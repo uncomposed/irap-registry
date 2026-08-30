@@ -6,6 +6,11 @@ The product distinguishes IRAP authority from federation transport. Git commits 
 
 The recovered source package is preserved verbatim in [`protocol/irap-v0.1`](./protocol/irap-v0.1). Its normative [`SPEC.yaml`](./SPEC.yaml), original [`product.md`](./product.md), and original [`acceptance.md`](./acceptance.md) are also available at the repository root. The canonical idea history now lives separately at [`uncomposed/irap-protocol`](https://github.com/uncomposed/irap-protocol). The implemented v0.4 boundary is documented in [`IMPLEMENTATION.md`](./IMPLEMENTATION.md), [`IMPLEMENTATION_ACCEPTANCE.md`](./IMPLEMENTATION_ACCEPTANCE.md), and [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
+Cole's non-normative convention for publishing his own ideas—including an idea
+explorer as one ordinary rendering of every idea—is recorded in
+[`PERSONAL_IDEA_PUBLISHING.md`](./PERSONAL_IDEA_PUBLISHING.md). It does not add
+requirements to IRAP or to other publishers.
+
 ## Local development
 
 Install dependencies, then run the server and web client in separate terminals:

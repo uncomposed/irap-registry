@@ -22,6 +22,7 @@ const experienceKeys = [
   'access_url',
   'human_uri',
   'human_url',
+  'planned_human_uri',
 ] as const
 
 const experienceCache = new Map<string, { value: ArtifactExperience | null; expiresAt: number }>()

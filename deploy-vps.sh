@@ -24,13 +24,29 @@ fi
 release_commit="$(git rev-parse HEAD)"
 release_dir="$remote_root/releases/$release_commit"
 export IRAP_IMPLEMENTATION_COMMIT="$release_commit"
+release_stage="$(mktemp -d "${TMPDIR:-/tmp}/irap-release.XXXXXX")"
+trap 'rm -rf -- "$release_stage"' EXIT
+release_excludes=(
+  --exclude='/.git/'
+  --exclude='/.env'
+  --exclude='/data/'
+  --exclude='/dist/'
+  --exclude='/server-dist/'
+  --exclude='/node_modules/'
+  --exclude='/release/'
+)
 
 echo "Running local release gates for $release_commit"
 npm test
 npm run build
 npm audit --audit-level=high
 docker compose config --quiet
-docker compose build --pull --no-cache
+rsync -a --delete "${release_excludes[@]}" ./ "$release_stage/"
+test -f "$release_stage/src/data/demo.ts"
+docker build --pull --no-cache \
+  --build-arg "IRAP_IMPLEMENTATION_COMMIT=$release_commit" \
+  --tag "irap-publisher:$release_commit" \
+  "$release_stage"
 
 echo "Inspecting the VPS without changing it"
 ssh "$vps_host" "set -eu; systemctl is-active caddy; systemctl is-active docker; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'; test -r /etc/caddy/Caddyfile; grep -n 'ideas.proximitytoprogress.com' /etc/caddy/Caddyfile || true"
@@ -43,16 +59,9 @@ fi
 echo "Uploading the exact release to $vps_host:$release_dir"
 ssh "$vps_host" "set -eu; install -d -m 0755 '$remote_root/releases' '$release_dir'; install -d -m 0700 '$remote_root/shared'"
 rsync -az --delete \
-  --exclude='.git/' \
-  --exclude='.env' \
-  --exclude='data/' \
-  --exclude='dist/' \
-  --exclude='server-dist/' \
-  --exclude='node_modules/' \
-  --exclude='release/' \
-  ./ "$vps_host:$release_dir/"
+  "$release_stage/" "$vps_host:$release_dir/"
 
-ssh "$vps_host" "set -eu; printf '%s\n' '$release_commit' > '$release_dir/RELEASE_COMMIT'; if test ! -f '$remote_root/shared/.env'; then cp '$release_dir/.env.example' '$remote_root/shared/.env'; chmod 0600 '$remote_root/shared/.env'; echo 'Created the production environment template at $remote_root/shared/.env.'; echo 'Edit it, then rerun ./deploy-vps.sh upload.'; exit 20; fi; ln -sfn '$remote_root/shared/.env' '$release_dir/.env'; ln -sfn '$release_dir' '$remote_root/current'; cd '$remote_root/current'; IRAP_IMPLEMENTATION_COMMIT='$release_commit' docker compose up -d --build; for attempt in 1 2 3 4 5 6 7 8 9 10; do curl -fsS http://127.0.0.1:8787/api/health && exit 0; sleep 2; done; docker compose logs --tail=80; exit 1"
+ssh "$vps_host" "set -eu; test -f '$release_dir/src/data/demo.ts'; printf '%s\n' '$release_commit' > '$release_dir/RELEASE_COMMIT'; if test ! -f '$remote_root/shared/.env'; then cp '$release_dir/.env.example' '$remote_root/shared/.env'; chmod 0600 '$remote_root/shared/.env'; echo 'Created the production environment template at $remote_root/shared/.env.'; echo 'Edit it, then rerun ./deploy-vps.sh upload.'; exit 20; fi; ln -sfn '$remote_root/shared/.env' '$release_dir/.env'; ln -sfn '$release_dir' '$remote_root/current'; cd '$remote_root/current'; IRAP_IMPLEMENTATION_COMMIT='$release_commit' docker compose up -d --build; for attempt in 1 2 3 4 5 6 7 8 9 10; do curl -fsS http://127.0.0.1:8787/api/health && exit 0; sleep 2; done; docker compose logs --tail=80; exit 1"
 
 echo "Container health passed on loopback. Caddy has not been modified."
 echo "Inspect /etc/caddy/Caddyfile, merge Caddyfile.example, validate, reload, and run the public checks in DEPLOYMENT.md."

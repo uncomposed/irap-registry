@@ -38,7 +38,7 @@ From a clean local checkout:
 ./deploy-vps.sh preflight
 ```
 
-This runs tests, both builds, dependency audit, Compose validation, Docker build, and read-only discovery over SSH. It does not change the VPS.
+This runs tests, both builds, dependency audit, Compose validation, and read-only discovery over SSH. It also creates one filtered release payload, verifies required source files inside it, and performs an uncached Docker build from that exact payload. The upload mode transfers the same staged bytes, preventing local and remote build contexts from diverging. Preflight does not change the VPS.
 
 To transfer the exact committed release:
 

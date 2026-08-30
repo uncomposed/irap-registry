@@ -223,6 +223,13 @@ export function openDatabase(path: string) {
   return db
 }
 
+export function openReadonlyDatabase(path: string) {
+  const db = new Database(path, { readonly: true, fileMustExist: true })
+  db.pragma('foreign_keys = ON')
+  db.pragma('busy_timeout = 5000')
+  return db
+}
+
 function backfillIdeaStates(db: Database.Database) {
   const rows = db.prepare(`SELECT * FROM ideas WHERE git_verified = 1 AND manifest_yaml IS NOT NULL AND verifiers_yaml IS NOT NULL AND policy_yaml IS NOT NULL`).all() as IdeaRow[]
   const insert = db.prepare(`INSERT OR IGNORE INTO idea_states

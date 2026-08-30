@@ -1,4 +1,4 @@
-# IRAP Registry v0.4.1 acceptance criteria
+# IRAP Registry v0.5 acceptance criteria
 
 Each criterion includes observable evidence and a failure it is designed to catch.
 
@@ -51,6 +51,9 @@ Each criterion includes observable evidence and a failure it is designed to catc
 - **A36 — Historical artifact retention:** startup verifies the release manifest and assets, copies them into the durable volume, and refuses different manifest bytes for an already preserved commit. Catches silent artifact replacement or disappearance after upgrade.
 - **A37 — Payload identity:** preflight builds the same filtered staging directory that upload transfers, and remote activation checks a required nested source file before changing `current`. Catches ignore rules making local and VPS build contexts diverge.
 - **A38 — Public permalink resolution:** rendering and attestation detail APIs resolve both internal UUIDs and the local public-URI suffix used by browser permalinks. Catches a valid public identifier loading the SPA shell but failing its detail request.
+- **A39 — Bundle/state separation:** a publication bundle has its own full source commit while every included rendering independently targets one full historical idea commit. Moving refs are rejected. Catches publication metadata silently retargeting an idea.
+- **A40 — Secret-contained publication:** bundle dry-run and apply execute inside the server container, use the existing loopback API, and never emit the administrator token. Catches convenience automation expanding the credential boundary.
+- **A41 — Bundle idempotency and conflict refusal:** a repeated exact bundle reports existing records without duplicate activities; reused slugs, identities, or rendering URIs with different content refuse apply. Catches retries becoming duplication or equivocation.
 
 ## Quality gate
 
@@ -61,7 +64,7 @@ npm test
 npm run build
 ```
 
-Stopping rule: do not call v0.4.1 ready for VPS transfer if any automated test, server compilation, web build, staged-payload container build, discovery endpoint, publication transaction, historical-policy falsification, immutable-artifact test, public-permalink lookup, backup/restore check, or signed-transport falsification fails.
+Stopping rule: do not call v0.5 ready for VPS transfer if any automated test, server compilation, web build, staged-payload container build, discovery endpoint, publication transaction, historical-policy falsification, immutable-artifact test, public-permalink lookup, bundle dry-run, bundle idempotency/conflict test, backup/restore check, or signed-transport falsification fails.
 
 ## Omission and falsification checks
 

@@ -3,10 +3,11 @@ import { chmod, mkdir, readFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { parse } from 'yaml'
 import { loadConfig } from './config.js'
-import { openDatabase, type AttestationRow, type IdeaRow, type IdeaStateRow, type RenderingRow } from './database.js'
+import { openDatabase, openReadonlyDatabase, type AttestationRow, type IdeaRow, type IdeaStateRow, type RenderingRow } from './database.js'
 import { GitResolver } from './git-resolver.js'
 import { attestationDocumentSchema, renderingDocumentSchema } from './irap.js'
 import { evaluateAttestation } from './registry-verification.js'
+import { applyPublicationBundle, createPublicationPlan, loadPublicationBundle, type PublicationSource } from './publication-bundle.js'
 
 type DeploymentManifest = {
   live_url: string
@@ -67,10 +68,56 @@ async function publishReference(config: ReturnType<typeof loadConfig>) {
   }) + '\n')
 }
 
+function publicationSource(arguments_: string[]): { source: PublicationSource; apply: boolean } {
+  const values = new Map<string, string>()
+  let apply = false
+  let dryRun = false
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index]
+    if (argument === '--apply') { apply = true; continue }
+    if (argument === '--dry-run') { dryRun = true; continue }
+    if (!['--repository', '--revision', '--object-format', '--path'].includes(argument)) throw new Error(`Unknown publish-bundle argument: ${argument}`)
+    const value = arguments_[index + 1]
+    if (!value || value.startsWith('--')) throw new Error(`${argument} requires a value.`)
+    values.set(argument, value)
+    index += 1
+  }
+  if (apply && dryRun) throw new Error('Choose either --dry-run or --apply, not both.')
+  const repository = values.get('--repository')
+  const commit = values.get('--revision')
+  const objectFormat = values.get('--object-format') ?? 'sha1'
+  if (!repository || !commit) throw new Error('publish-bundle requires --repository and --revision.')
+  if (objectFormat !== 'sha1' && objectFormat !== 'sha256') throw new Error('--object-format must be sha1 or sha256.')
+  return {
+    source: { repository, objectFormat, commit, path: values.get('--path') ?? '.idea/publication.yaml' },
+    apply,
+  }
+}
+
+async function publishBundle(config: ReturnType<typeof loadConfig>, arguments_: string[]) {
+  const { source, apply } = publicationSource(arguments_)
+  const loaded = await loadPublicationBundle(config, new GitResolver(config), source)
+  const db = openReadonlyDatabase(config.databasePath)
+  let plan
+  try {
+    plan = createPublicationPlan(db, loaded)
+  } finally {
+    db.close()
+  }
+  if (!apply || plan.conflicts.length) {
+    process.stdout.write(JSON.stringify({ mode: apply ? 'apply-refused' : 'dry-run', plan }, null, 2) + '\n')
+    if (plan.conflicts.length) process.exitCode = 2
+    return
+  }
+  const result = await applyPublicationBundle(config, loaded, plan)
+  process.stdout.write(JSON.stringify({ mode: 'applied', plan, result }, null, 2) + '\n')
+}
+
 async function main() {
   const config = loadConfig()
   const command = process.argv[2]
   if (command === 'publish-reference') return publishReference(config)
+  if (command === 'publish-bundle') return publishBundle(config, process.argv.slice(3))
   const db = openDatabase(config.databasePath)
   try {
     if (command === 'backup') {
@@ -132,7 +179,7 @@ async function main() {
       return
     }
 
-    throw new Error('Usage: npm run cli -- backup [data-relative-path] | verify-all | sync | publish-reference')
+    throw new Error('Usage: npm run cli -- backup [data-relative-path] | verify-all | sync | publish-reference | publish-bundle --repository URL --revision FULL_COMMIT [--object-format sha1|sha256] [--path .idea/publication.yaml] [--dry-run|--apply]')
   } finally {
     db.close()
   }

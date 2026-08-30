@@ -58,9 +58,17 @@ npm run cli -- sync
 npm run cli -- verify-all
 npm run cli -- backup
 npm run cli -- publish-reference
+npm run cli -- publish-bundle --repository REPOSITORY_URL --revision FULL_COMMIT --dry-run
 ```
 
 `sync` advances current canonical refs while preserving historical rendering targets. `verify-all` recomputes derived results without rewriting raw signed records. `backup` uses SQLite's online backup API and writes beneath `/app/data`. `publish-reference` idempotently publishes the canonical IRAP state and this deployment's immutable rendering manifest.
+
+`publish-bundle` is the generic operator path for Git-pinned idea repositories. It
+separates the bundle source commit from the exact idea state, verifies every rendering
+declaration and artifact, compares the proposal with durable state, and defaults to a
+non-mutating dry-run. `--apply` is required to publish. Run it inside the production
+container so the administrator token never leaves the VPS. See
+[`PUBLICATION_BUNDLES.md`](./PUBLICATION_BUNDLES.md).
 
 Each build creates a deployment manifest containing the exact implementation and protocol commits plus SHA-256 digests for the rendered site assets. On startup, the service preserves that snapshot beneath the identity-bearing data volume and serves it from `/artifacts/<implementation-commit>/` even after later releases.
 

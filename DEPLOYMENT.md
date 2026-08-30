@@ -83,6 +83,19 @@ Publish the canonical IRAP idea and this exact deployment rendering without expo
 docker compose exec irap npm run cli -- publish-reference
 ```
 
+For any other Git-pinned idea, use the generic bundle workflow. Review the JSON dry-run
+before using `--apply`; neither command prints the administrator token:
+
+```sh
+docker compose exec -T irap npm run cli -- publish-bundle \
+  --repository https://github.com/uncomposed/spoken-margins-idea.git \
+  --revision 6af9d8155bdda8260d000383713a78ab17fb4f75 \
+  --dry-run
+```
+
+See [`PUBLICATION_BUNDLES.md`](./PUBLICATION_BUNDLES.md) for the contract, conflict
+rules, and apply command.
+
 The command is idempotent: an existing idea/rendering must match the pinned commits and deterministic rendering URI or it fails closed.
 
 ## Backup and rollback

@@ -20,7 +20,7 @@ export async function inspectArtifact(
     await validateUrl(uri, config)
     const response = await fetchImplementation(uri, {
       method: 'GET',
-      headers: { accept: '*/*', 'user-agent': 'IRAP-Registry/0.3 artifact-verifier' },
+      headers: { accept: '*/*', 'user-agent': 'IRAP-Registry/0.5 artifact-verifier' },
       redirect: 'manual',
       signal: AbortSignal.timeout(config.artifactTimeoutMs),
     })

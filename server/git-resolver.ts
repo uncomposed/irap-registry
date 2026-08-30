@@ -28,6 +28,13 @@ export type ResolvedIdeaState = {
   sourceRevision: string
 }
 
+export type ResolvedRepositoryFiles = {
+  commit: string
+  objectFormat: 'sha1' | 'sha256'
+  sourceRevision: string
+  files: Record<string, string>
+}
+
 function safeRepositoryPath(value: unknown, fallback: string) {
   const path = typeof value === 'string' ? value : fallback
   if (!/^\.idea\/[A-Za-z0-9._/-]+\.ya?ml$/.test(path) || path.includes('..')) throw new Error(`Unsafe repository metadata path: ${path}`)
@@ -40,6 +47,15 @@ function safeRevision(value: string, objectFormat: 'sha1' | 'sha256') {
   if (!/^refs\/(heads|tags)\/[A-Za-z0-9][A-Za-z0-9._/-]{0,240}$/.test(value)) throw new Error('Git target must be a full object ID or a full heads/tags ref.')
   if (value.includes('..') || value.includes('//') || value.includes('@{') || value.endsWith('.') || value.endsWith('/') || value.endsWith('.lock')) {
     throw new Error('Git target contains an unsafe ref name.')
+  }
+  return value
+}
+
+function safeContentPath(value: string) {
+  const segments = value.split('/')
+  if (value.length < 1 || value.length > 240 || value.startsWith('/') || value.includes('\\') || value.includes('\0') ||
+      !/^[A-Za-z0-9._/-]+$/.test(value) || segments.some((segment) => !segment || segment === '.' || segment === '..') || segments[0] === '.git') {
+    throw new Error(`Unsafe repository content path: ${value}`)
   }
   return value
 }
@@ -67,7 +83,17 @@ export class GitResolver {
     }
   }
 
-  async resolve(repository: string, objectFormat: 'sha1' | 'sha256', requestedRevision: string): Promise<ResolvedIdeaState> {
+  private async withCommit<T>(
+    repository: string,
+    objectFormat: 'sha1' | 'sha256',
+    requestedRevision: string,
+    work: (input: {
+      commit: string
+      objectFormat: 'sha1' | 'sha256'
+      sourceRevision: string
+      show: (path: string, maxBuffer?: number) => Promise<string>
+    }) => Promise<T>,
+  ): Promise<T> {
     const url = await this.validateUrl(repository, this.config)
     if (url.protocol !== 'https:' && !(this.config.allowInsecureFederation && url.protocol === 'http:')) {
       throw new Error('Git publication currently supports HTTPS repositories only.')
@@ -104,7 +130,13 @@ export class GitResolver {
       const packKilobytes = Number(counts.match(/^size-pack:\s*(\d+)$/m)?.[1] ?? 0)
       if (packKilobytes * 1024 > this.config.gitMaxPackBytes) throw new Error('Fetched Git pack exceeds the configured size limit.')
 
-      const show = (path: string) => run(['-C', cache, 'show', `${commit}:${path}`], 512_000)
+      const show = (path: string, maxBuffer = 512_000) => run(['-C', cache, 'show', `${commit}:${safeContentPath(path)}`], maxBuffer)
+      return work({ commit, objectFormat: detectedFormat, sourceRevision: revision, show })
+    })
+  }
+
+  async resolve(repository: string, objectFormat: 'sha1' | 'sha256', requestedRevision: string): Promise<ResolvedIdeaState> {
+    return this.withCommit(repository, objectFormat, requestedRevision, async ({ commit, objectFormat: detectedFormat, sourceRevision, show }) => {
       const manifestYaml = await show('.idea/manifest.yaml')
       const manifest = parse(manifestYaml) as IdeaManifest
       if (manifest?.spec_version !== '0.1' || typeof manifest.idea?.id !== 'string' || typeof manifest.idea?.name !== 'string') {
@@ -127,8 +159,23 @@ export class GitResolver {
         verifiersYaml,
         policyYaml,
         canonicalRef: manifest.repository.canonical_ref,
-        sourceRevision: revision,
+        sourceRevision,
       }
+    })
+  }
+
+  async readFiles(
+    repository: string,
+    objectFormat: 'sha1' | 'sha256',
+    requestedRevision: string,
+    paths: string[],
+  ): Promise<ResolvedRepositoryFiles> {
+    if (paths.length < 1 || paths.length > 100) throw new Error('Repository file reads require between 1 and 100 paths.')
+    const safePaths = paths.map(safeContentPath)
+    if (new Set(safePaths).size !== safePaths.length) throw new Error('Repository file reads must not contain duplicate paths.')
+    return this.withCommit(repository, objectFormat, requestedRevision, async ({ commit, objectFormat: detectedFormat, sourceRevision, show }) => {
+      const contents = await Promise.all(safePaths.map(async (path) => [path, await show(path)] as const))
+      return { commit, objectFormat: detectedFormat, sourceRevision, files: Object.fromEntries(contents) }
     })
   }
 }

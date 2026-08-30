@@ -23,13 +23,14 @@ export type PublishedIdea = {
 
 type IdeaDetail = PublishedIdea & {
   states: Array<{ id: string; repository: string; object_format: string; commit: string; source_revision: string; resolved_at: string }>
-  renderings: Array<{ id: string; uri: string; title: string | null; artifact_uri: string; artifact_digest: string; digest_verified: boolean; digest_status: 'verified' | 'mismatch' | 'unverified'; status: string; submitted_at: string }>
+  renderings: Array<{ id: string; uri: string; title: string | null; artifact_uri: string; artifact_digest: string; experience: { uri: string; source: 'live' | 'repository' } | null; digest_verified: boolean; digest_status: 'verified' | 'mismatch' | 'unverified'; status: string; submitted_at: string }>
 }
 
 type RenderingDetail = {
   id: string
   uri: string
   document: { rendering: { title?: string; description?: string; artifact: { uri: string; digest: string }; renders: { idea_id: string; git: { repository: string; object_format: string; commit: string } }; creator: { id: string } } }
+  experience: { uri: string; source: 'live' | 'repository' } | null
   status: string
   digest_verified: boolean
   digest_status: 'verified' | 'mismatch' | 'unverified'
@@ -57,6 +58,14 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 
 function shortHash(value: string) {
   return `${value.slice(0, 10)}…${value.slice(-7)}`
+}
+
+function repositoryBrowserUri(value: string) {
+  try {
+    const uri = new URL(value)
+    if (['github.com', 'gitlab.com', 'codeberg.org'].includes(uri.hostname) && uri.pathname.endsWith('.git')) uri.pathname = uri.pathname.slice(0, -4)
+    return uri.toString()
+  } catch { return value }
 }
 
 function usePublisherData(refresh = 0) {
@@ -173,13 +182,16 @@ export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
             <aside className="idea-detail">
               {selectedIdea ? <>
                 <span className="detail-label">Resolved idea</span><h2>{selectedIdea.name}</h2><p>{selectedIdea.summary}</p>
-                <dl><div><dt>Idea ID</dt><dd>{selectedIdea.id}</dd></div><div><dt>Repository</dt><dd>{selectedIdea.repository}</dd></div><div><dt>State proof</dt><dd>{selectedIdea.git_verified ? 'Fetched and resolved from Git' : 'Not fetched in development mode'}</dd></div><div><dt>Object format</dt><dd>{selectedIdea.git_commit.algorithm.toUpperCase()}</dd></div><div><dt>Exact commit</dt><dd><code>{selectedIdea.git_commit.value}</code></dd></div></dl>
+                <dl><div><dt>Idea ID</dt><dd>{selectedIdea.id}</dd></div><div><dt>Repository</dt><dd><a href={repositoryBrowserUri(selectedIdea.repository)} target="_blank" rel="noreferrer">Open source repository <Icon name="arrow" size={11}/></a></dd></div><div><dt>State proof</dt><dd>{selectedIdea.git_verified ? 'Fetched and resolved from Git' : 'Not fetched in development mode'}</dd></div><div><dt>Object format</dt><dd>{selectedIdea.git_commit.algorithm.toUpperCase()}</dd></div><div><dt>Exact commit</dt><dd><code>{selectedIdea.git_commit.value}</code></dd></div></dl>
                 {detail && <section className="registry-renderings">
                   <div className="registry-section-title"><span>Registered renderings</span><strong>{detail.renderings.length}</strong></div>
                   {detail.renderings.length === 0 ? <p className="registry-empty">No external artifact has been registered against this idea yet.</p> : detail.renderings.map((entry) => (
-                    <button key={entry.id} className={rendering?.id === entry.id ? 'active' : ''} onClick={() => void selectRendering(entry.id)}>
-                      <span><strong>{entry.title ?? 'Untitled rendering'}</strong><small>{entry.digest_status === 'verified' ? 'Digest independently verified' : entry.digest_status === 'mismatch' ? 'Severe: artifact digest mismatch' : 'Submitter-supplied digest'}</small></span><Icon name="arrow" size={14}/>
-                    </button>
+                    <div key={entry.id} className={`registry-rendering-row ${rendering?.id === entry.id ? 'active' : ''}`}>
+                      <a href={entry.experience?.uri ?? entry.artifact_uri} target="_blank" rel="noreferrer">
+                        <span><strong>{entry.title ?? 'Untitled rendering'}</strong><small>{entry.experience?.source === 'repository' ? 'Open rendering source' : entry.experience ? 'Open rendering' : 'Open technical artifact'} · {entry.digest_status === 'verified' ? 'digest verified' : entry.digest_status === 'mismatch' ? 'digest mismatch' : 'digest unverified'}</small></span><Icon name="arrow" size={14}/>
+                      </a>
+                      <button type="button" onClick={() => void selectRendering(entry.id)}>Evidence</button>
+                    </div>
                   ))}
                 </section>}
                 {rendering && <section className="registry-rendering-detail">
@@ -187,7 +199,10 @@ export function IdeaDirectory({ onPublish }: { onPublish: () => void }) {
                   <h3>{rendering.document.rendering.title ?? 'Untitled rendering'}</h3>
                   {rendering.document.rendering.description && <p>{rendering.document.rendering.description}</p>}
                   <div className="registry-state-label"><Icon name="git" size={14}/>{rendering.historical_state.commit === selectedIdea.git_commit.value ? 'Current target' : 'Historical target'} · <code>{shortHash(rendering.historical_state.commit)}</code></div>
-                  <a href={rendering.document.rendering.artifact.uri} target="_blank" rel="noreferrer">Open creator-hosted artifact <Icon name="arrow" size={13}/></a>
+                  <div className="rendering-links">
+                    <a className="rendering-primary-link" href={rendering.experience?.uri ?? rendering.document.rendering.artifact.uri} target="_blank" rel="noreferrer">{rendering.experience?.source === 'repository' ? 'Open rendering source' : rendering.experience ? 'Open rendering' : 'Open technical artifact'} <Icon name="arrow" size={13}/></a>
+                    {rendering.experience && <a href={rendering.document.rendering.artifact.uri} target="_blank" rel="noreferrer">View artifact manifest</a>}
+                  </div>
                   {rendering.digest_status !== 'verified' && <div className={`digest-warning ${rendering.digest_status === 'mismatch' ? 'digest-mismatch' : ''}`}><Icon name="alert" size={15}/><span>{rendering.digest_status === 'mismatch' ? 'SEVERE: fetched artifact bytes do not match the bound digest.' : 'Digest recorded but not independently fetched.'}</span></div>}
                   {Object.entries(rendering.recognition).map(([claim, result]) => <div className="recognition-summary" key={claim}>
                     <span className={result.recognized ? 'recognized' : 'pending'}><Icon name={result.recognized ? 'check' : 'alert'} size={14}/>{result.recognized ? 'Recognized' : 'Not recognized'}</span>

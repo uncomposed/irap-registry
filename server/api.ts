@@ -8,6 +8,7 @@ import { FederationService } from './federation.js'
 import { createIdeaActivity } from './activitypub.js'
 import { ideaInputSchema } from './irap.js'
 import { GitResolver } from './git-resolver.js'
+import { discoverArtifactExperience } from './artifact.js'
 
 function authorized(request: FastifyRequest, config: ServiceConfig) {
   const value = request.headers.authorization
@@ -23,7 +24,7 @@ export function requireAdmin(config: ServiceConfig) {
   }
 }
 
-function publicIdeaDetail(db: Database.Database, row: IdeaRow) {
+async function publicIdeaDetail(db: Database.Database, row: IdeaRow, config: ServiceConfig) {
   const states = db.prepare('SELECT * FROM idea_states WHERE idea_id = ? ORDER BY resolved_at DESC').all(row.idea_id) as IdeaStateRow[]
   const renderings = db.prepare('SELECT * FROM renderings WHERE idea_id = ? ORDER BY submitted_at DESC').all(row.idea_id) as RenderingRow[]
   return {
@@ -36,17 +37,20 @@ function publicIdeaDetail(db: Database.Database, row: IdeaRow) {
       source_revision: state.source_revision,
       resolved_at: state.resolved_at,
     })),
-    renderings: renderings.map((rendering) => ({
+    renderings: await Promise.all(renderings.map(async (rendering) => ({
       id: rendering.id,
       uri: rendering.rendering_uri,
       title: rendering.title,
       artifact_uri: rendering.artifact_uri,
       artifact_digest: rendering.artifact_digest,
+      experience: rendering.digest_verified === 1
+        ? await discoverArtifactExperience(rendering.artifact_uri, rendering.artifact_digest, config)
+        : null,
       digest_verified: rendering.digest_verified === 1,
       digest_status: rendering.digest_verified === 1 ? 'verified' : rendering.digest_verified === -1 ? 'mismatch' : 'unverified',
       status: rendering.status,
       submitted_at: rendering.submitted_at,
-    })),
+    }))),
   }
 }
 
@@ -81,11 +85,11 @@ export function registerApi(app: FastifyInstance, config: ServiceConfig, db: Dat
 
   app.get('/api/ideas/:slug', async (request, reply) => {
     const row = db.prepare('SELECT * FROM ideas WHERE slug = ?').get((request.params as { slug: string }).slug) as IdeaRow | undefined
-    return row ? publicIdeaDetail(db, row) : reply.code(404).send({ error: 'Idea not found.' })
+    return row ? publicIdeaDetail(db, row, config) : reply.code(404).send({ error: 'Idea not found.' })
   })
   app.get('/api/v1/ideas/:slug', async (request, reply) => {
     const row = db.prepare('SELECT * FROM ideas WHERE slug = ?').get((request.params as { slug: string }).slug) as IdeaRow | undefined
-    return row ? publicIdeaDetail(db, row) : reply.code(404).send({ error: 'Idea not found.' })
+    return row ? publicIdeaDetail(db, row, config) : reply.code(404).send({ error: 'Idea not found.' })
   })
 
   app.post('/api/ideas', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } }, preHandler: requireAdmin(config) }, async (request, reply) => {

@@ -247,6 +247,8 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 .idea-detail dt { color: #7e8a9b; font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
 .idea-detail dd { margin: 0; text-align: right; font-size: 8px; overflow-wrap: anywhere; }
 .idea-detail dd code { color: #e7d39c; }
+.idea-detail dd a { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: #e0b864; text-decoration: none; }
+.idea-detail dd a:hover { color: #f1ce83; }
 .idea-detail details { border: 1px solid #334154; border-radius: 5px; }
 .idea-detail summary { cursor: pointer; padding: 10px 12px; color: #c2c9d2; font-size: 9px; }
 .idea-detail pre { margin: 0; border-top: 1px solid #334154; padding: 12px; max-height: 240px; overflow: auto; color: #bbc5cf; background: #101825; font-size: 8px; line-height: 1.5; }
@@ -259,15 +261,22 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 .registry-section-title { display: flex; justify-content: space-between; align-items: center; color: #9aa6b6; font-size: 8px; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; }
 .registry-section-title strong { color: #d7a84b; }
 .registry-empty { color: #7e8998 !important; font-size: 8px !important; }
-.registry-renderings > button { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: left; border: 1px solid #334154; border-radius: 5px; background: #1b2738; color: white; padding: 10px 11px; margin-top: 6px; cursor: pointer; }
-.registry-renderings > button.active, .registry-renderings > button:hover { border-color: #9d804a; background: #243146; }
-.registry-renderings > button > span { display: flex; flex-direction: column; gap: 3px; }
-.registry-renderings > button strong { font-size: 9px; }
-.registry-renderings > button small { color: #8491a2; font-size: 7px; }
+.registry-rendering-row { width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: stretch; border: 1px solid #334154; border-radius: 5px; background: #1b2738; color: white; margin-top: 6px; overflow: hidden; }
+.registry-rendering-row.active, .registry-rendering-row:hover { border-color: #9d804a; background: #243146; }
+.registry-rendering-row > a { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: white; padding: 10px 11px; text-decoration: none; }
+.registry-rendering-row > a > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.registry-rendering-row strong { font-size: 9px; }
+.registry-rendering-row small { color: #9eabbc; font-size: 7px; }
+.registry-rendering-row > button { border: 0; border-left: 1px solid #334154; background: #152031; color: #d7a84b; padding: 0 9px; cursor: pointer; font-size: 7px; text-transform: uppercase; letter-spacing: .05em; }
+.registry-rendering-row > button:hover { background: #2b3950; color: #f0cb7d; }
 .registry-rendering-detail { border: 1px solid #39475a; background: #101927; border-radius: 6px; padding: 15px; margin: 14px 0; }
 .registry-rendering-detail h3 { font: 500 17px Iowan Old Style, Georgia, serif; margin: 7px 0; }
 .registry-rendering-detail > p { color: #9ba6b5; font-size: 8px; line-height: 1.5; }
-.registry-rendering-detail > a { display: inline-flex; gap: 6px; align-items: center; color: #e0b864; font-size: 8px; margin: 9px 0; text-decoration: none; }
+.rendering-links { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 13px; margin: 9px 0; }
+.rendering-links a { display: inline-flex; gap: 6px; align-items: center; color: #aeb8c6; font-size: 8px; text-decoration: none; }
+.rendering-links a:hover { color: white; }
+.rendering-links .rendering-primary-link { color: #e0b864; font-weight: 750; }
+.rendering-links .rendering-primary-link:hover { color: #f1ce83; }
 .registry-state-label { display: flex; align-items: center; gap: 5px; color: #9fabba; font-size: 8px; }
 .registry-state-label code { color: #e7d39c; }
 .digest-warning { display: flex; gap: 6px; align-items: center; color: #d9b86f; background: #332b1d; border-radius: 4px; padding: 8px; font-size: 8px; }

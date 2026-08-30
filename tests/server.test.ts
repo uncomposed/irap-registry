@@ -11,7 +11,7 @@ import type { ServiceConfig } from '../server/config'
 import { createSignedPostHeaders, verifySignedPost } from '../server/http-signatures'
 import { GitResolver } from '../server/git-resolver'
 import { canonicalize } from '../src/domain/canonicalize'
-import { inspectArtifact } from '../server/artifact'
+import { discoverArtifactExperience, inspectArtifact } from '../server/artifact'
 
 const cleanup: string[] = []
 
@@ -372,6 +372,24 @@ describe('artifact retrieval boundary', () => {
     } finally {
       server.close()
       await once(server, 'close')
+    }
+  })
+
+  it('discovers a human rendering URL only from digest-matching artifact manifests', async () => {
+    const config = testConfig()
+    const validator = async (value: string) => new URL(value)
+    const cases: Array<{ document: unknown; expected: { uri: string; source: 'live' | 'repository' } }> = [
+      { document: { rendering: { live_uri: 'https://rendering.example/live' } }, expected: { uri: 'https://rendering.example/live', source: 'live' } },
+      { document: { product: { entry_url: 'https://rendering.example/entry' } }, expected: { uri: 'https://rendering.example/entry', source: 'live' } },
+      { document: { live_url: 'https://rendering.example/root' }, expected: { uri: 'https://rendering.example/root', source: 'live' } },
+      { document: { source: { repository: 'https://github.com/example/rendering.git' } }, expected: { uri: 'https://github.com/example/rendering', source: 'repository' } },
+    ]
+    for (const { document, expected } of cases) {
+      const bytes = Buffer.from(JSON.stringify(document))
+      const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+      const respond: typeof fetch = async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length), 'content-type': 'application/json' } })
+      await expect(discoverArtifactExperience('https://artifacts.example/manifest.json', digest, config, validator, respond)).resolves.toEqual(expected)
+      await expect(discoverArtifactExperience('https://artifacts.example/manifest.json', `sha256:${'0'.repeat(64)}`, config, validator, respond)).resolves.toBeNull()
     }
   })
 })

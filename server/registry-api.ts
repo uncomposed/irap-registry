@@ -11,7 +11,7 @@ import type { FederationService } from './federation.js'
 import type { GitResolver, ResolvedIdeaState } from './git-resolver.js'
 import { attestationDocumentSchema, renderingDocumentSchema, renderingSubmissionSchema, type AttestationDocument, type RenderingDocument } from './irap.js'
 import { aggregateRecognition, evaluateAttestation } from './registry-verification.js'
-import { inspectArtifact } from './artifact.js'
+import { discoverArtifactExperience, inspectArtifact } from './artifact.js'
 
 const publicCollection = 'https://www.w3.org/ns/activitystreams#Public'
 
@@ -208,10 +208,14 @@ export function registerRegistryApi(
     if (!row) return reply.code(404).send({ error: 'Rendering not found.' })
     const state = db.prepare('SELECT * FROM idea_states WHERE id = ?').get(row.state_id) as IdeaStateRow
     const attestations = db.prepare('SELECT * FROM attestations WHERE rendering_id = ? ORDER BY issued_at DESC').all(row.id) as AttestationRow[]
+    const experience = row.digest_verified === 1
+      ? await discoverArtifactExperience(row.artifact_uri, row.artifact_digest, config)
+      : null
     return {
       id: row.id,
       uri: row.rendering_uri,
       document: JSON.parse(row.raw_manifest_json),
+      experience,
       status: row.status,
       digest_verified: row.digest_verified === 1,
       digest_status: row.digest_verified === 1 ? 'verified' : row.digest_verified === -1 ? 'mismatch' : 'unverified',

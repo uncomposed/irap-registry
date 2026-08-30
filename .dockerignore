@@ -1,6 +1,6 @@
 .git
 .env
-data
+/data
 dist
 server-dist
 node_modules

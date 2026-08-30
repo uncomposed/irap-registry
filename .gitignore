@@ -1,7 +1,7 @@
 node_modules/
 dist/
 server-dist/
-data/
+/data/
 release/
 *.tsbuildinfo
 .DS_Store

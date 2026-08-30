@@ -30,7 +30,7 @@ npm test
 npm run build
 npm audit --audit-level=high
 docker compose config --quiet
-docker compose build
+docker compose build --pull --no-cache
 
 echo "Inspecting the VPS without changing it"
 ssh "$vps_host" "set -eu; systemctl is-active caddy; systemctl is-active docker; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'; test -r /etc/caddy/Caddyfile; grep -n 'ideas.proximitytoprogress.com' /etc/caddy/Caddyfile || true"

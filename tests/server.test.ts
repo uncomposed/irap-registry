@@ -274,7 +274,7 @@ describe('IRAP registry submission and historical recognition', () => {
       const submitted = await app.inject({
         method: 'POST', url: '/api/v1/renderings', headers: admin,
         payload: {
-          idea_slug: 'history', title: 'Historical rendering',
+          id: 'https://publisher.example/renderings/history-release', idea_slug: 'history', title: 'Historical rendering',
           artifact: { uri: 'https://artifacts.example/history.html', digest: `sha256:${'1'.repeat(64)}` },
           target: { repository, object_format: 'sha1', revision: 'refs/heads/main' },
           creator: { id: 'https://creators.example/alex' },
@@ -284,6 +284,7 @@ describe('IRAP registry submission and historical recognition', () => {
       expect(submitted.json().state).toMatchObject({ commit: commitA, source_revision: 'refs/heads/main' })
       const renderingId = submitted.json().id as string
       const renderingUri = submitted.json().uri as string
+      expect((await app.inject({ method: 'GET', url: '/api/v1/renderings/history-release' })).json().id).toBe(renderingId)
 
       const makeAttestation = (id: string, verifierId: string, keyId: string, privateKey: typeof alice.privateKey, digest = `sha256:${'1'.repeat(64)}`) => {
         const unsigned = {
@@ -309,13 +310,15 @@ describe('IRAP registry submission and historical recognition', () => {
           },
         }
       }
-      const aliceAttestation = makeAttestation('https://attestations.example/alice', 'https://reviewers.example/alice', 'alice-key', alice.privateKey)
+      const aliceAttestation = makeAttestation('https://publisher.example/attestations/alice-review', 'https://reviewers.example/alice', 'alice-key', alice.privateKey)
       const verified = await app.inject({ method: 'POST', url: '/api/v1/attestations/verify', payload: aliceAttestation })
       expect(verified.json()).toMatchObject({ signature_valid: true, recognized: true, recognition_status: 'recognized', policy_commit: commitA })
       const tampered = structuredClone(aliceAttestation)
       tampered.attestation.judgment.note = 'Changed after signing.'
       expect((await app.inject({ method: 'POST', url: '/api/v1/attestations/verify', payload: tampered })).json()).toMatchObject({ signature_valid: false, recognized: false, recognition_status: 'invalid' })
-      expect((await app.inject({ method: 'POST', url: '/api/v1/attestations', payload: aliceAttestation })).statusCode).toBe(201)
+      const alicePublished = await app.inject({ method: 'POST', url: '/api/v1/attestations', payload: aliceAttestation })
+      expect(alicePublished.statusCode).toBe(201)
+      expect((await app.inject({ method: 'GET', url: '/api/v1/attestations/alice-review' })).json().id).toBe(alicePublished.json().id)
 
       const bobAttestation = makeAttestation('https://attestations.example/bob', 'https://reviewers.example/bob', 'bob-key', bob.privateKey)
       const bobResult = await app.inject({ method: 'POST', url: '/api/v1/attestations', payload: bobAttestation })

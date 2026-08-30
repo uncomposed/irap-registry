@@ -44,6 +44,10 @@ function storedAttestation(row: AttestationRow) {
   }
 }
 
+function localResourceUri(config: ServiceConfig, resource: 'renderings' | 'attestations', identifier: string) {
+  return `${config.publicOrigin}/${resource}/${encodeURIComponent(identifier)}`
+}
+
 function renderingObject(config: ServiceConfig, row: RenderingRow, document: RenderingDocument) {
   const urls = serviceUrls(config)
   return {
@@ -198,7 +202,9 @@ export function registerRegistryApi(
   })
 
   app.get('/api/v1/renderings/:id', async (request, reply) => {
-    const row = db.prepare('SELECT * FROM renderings WHERE id = ?').get((request.params as { id: string }).id) as RenderingRow | undefined
+    const identifier = (request.params as { id: string }).id
+    const row = db.prepare('SELECT * FROM renderings WHERE id = ? OR rendering_uri = ?')
+      .get(identifier, localResourceUri(config, 'renderings', identifier)) as RenderingRow | undefined
     if (!row) return reply.code(404).send({ error: 'Rendering not found.' })
     const state = db.prepare('SELECT * FROM idea_states WHERE id = ?').get(row.state_id) as IdeaStateRow
     const attestations = db.prepare('SELECT * FROM attestations WHERE rendering_id = ? ORDER BY issued_at DESC').all(row.id) as AttestationRow[]
@@ -275,7 +281,9 @@ export function registerRegistryApi(
   })
 
   app.get('/api/v1/attestations/:id', async (request, reply) => {
-    const row = db.prepare('SELECT * FROM attestations WHERE id = ?').get((request.params as { id: string }).id) as AttestationRow | undefined
+    const identifier = (request.params as { id: string }).id
+    const row = db.prepare('SELECT * FROM attestations WHERE id = ? OR attestation_uri = ?')
+      .get(identifier, localResourceUri(config, 'attestations', identifier)) as AttestationRow | undefined
     return row ? storedAttestation(row) : reply.code(404).send({ error: 'Attestation not found.' })
   })
 

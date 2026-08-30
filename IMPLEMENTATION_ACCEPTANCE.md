@@ -1,4 +1,4 @@
-# IRAP Registry v0.4 acceptance criteria
+# IRAP Registry v0.4.1 acceptance criteria
 
 Each criterion includes observable evidence and a failure it is designed to catch.
 
@@ -50,6 +50,7 @@ Each criterion includes observable evidence and a failure it is designed to catc
 - **A35 — Immutable deployment rendering:** each build emits a manifest with exact protocol and implementation commits plus digests of every shipped site asset. Catches a mutable homepage being treated as durable evidence.
 - **A36 — Historical artifact retention:** startup verifies the release manifest and assets, copies them into the durable volume, and refuses different manifest bytes for an already preserved commit. Catches silent artifact replacement or disappearance after upgrade.
 - **A37 — Payload identity:** preflight builds the same filtered staging directory that upload transfers, and remote activation checks a required nested source file before changing `current`. Catches ignore rules making local and VPS build contexts diverge.
+- **A38 — Public permalink resolution:** rendering and attestation detail APIs resolve both internal UUIDs and the local public-URI suffix used by browser permalinks. Catches a valid public identifier loading the SPA shell but failing its detail request.
 
 ## Quality gate
 
@@ -60,7 +61,7 @@ npm test
 npm run build
 ```
 
-Stopping rule: do not call v0.4 ready for VPS transfer if any automated test, server compilation, web build, staged-payload container build, discovery endpoint, publication transaction, historical-policy falsification, immutable-artifact test, backup/restore check, or signed-transport falsification fails.
+Stopping rule: do not call v0.4.1 ready for VPS transfer if any automated test, server compilation, web build, staged-payload container build, discovery endpoint, publication transaction, historical-policy falsification, immutable-artifact test, public-permalink lookup, backup/restore check, or signed-transport falsification fails.
 
 ## Omission and falsification checks
 

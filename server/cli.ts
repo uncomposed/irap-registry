@@ -1,4 +1,5 @@
-import { chmod, mkdir } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { chmod, mkdir, readFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { parse } from 'yaml'
 import { loadConfig } from './config.js'
@@ -6,11 +7,70 @@ import { openDatabase, type AttestationRow, type IdeaRow, type IdeaStateRow, typ
 import { GitResolver } from './git-resolver.js'
 import { attestationDocumentSchema, renderingDocumentSchema } from './irap.js'
 import { evaluateAttestation } from './registry-verification.js'
-import { randomUUID } from 'node:crypto'
+
+type DeploymentManifest = {
+  live_url: string
+  idea_name: string
+  idea_summary: string
+  protocol_spec_uri: string
+  implementation: { repository: string; object_format: 'sha1'; commit: string }
+  renders: { idea_id: string; git: { repository: string; object_format: 'sha1' | 'sha256'; commit: string } }
+}
+
+async function responseBody(response: Response) {
+  const text = await response.text()
+  try { return JSON.parse(text) as Record<string, unknown> } catch { return { raw: text } }
+}
+
+async function publishReference(config: ReturnType<typeof loadConfig>) {
+  const manifestPath = resolve(config.staticPath, 'release-artifact/deployment-manifest.json')
+  const manifestBytes = await readFile(manifestPath)
+  const manifest = JSON.parse(manifestBytes.toString('utf8')) as DeploymentManifest
+  const base = `http://127.0.0.1:${config.port}`
+  const headers = { authorization: `Bearer ${config.adminToken}`, 'content-type': 'application/json' }
+  const specResponse = await fetch(manifest.protocol_spec_uri, { redirect: 'manual', signal: AbortSignal.timeout(15_000) })
+  if (!specResponse.ok) throw new Error(`Canonical specification fetch returned ${specResponse.status}.`)
+  const specYaml = await specResponse.text()
+  const ideaPayload = {
+    slug: 'irap', name: manifest.idea_name, summary: manifest.idea_summary,
+    repository: manifest.renders.git.repository,
+    git_commit: { algorithm: manifest.renders.git.object_format, value: manifest.renders.git.commit },
+    spec_yaml: specYaml,
+  }
+  const ideaResponse = await fetch(`${base}/api/ideas`, { method: 'POST', headers, body: JSON.stringify(ideaPayload) })
+  const ideaResult = await responseBody(ideaResponse)
+  if (![201, 409].includes(ideaResponse.status)) throw new Error(`Idea publication failed (${ideaResponse.status}): ${JSON.stringify(ideaResult)}`)
+  if (ideaResponse.status === 409) {
+    const existing = await fetch(`${base}/api/v1/ideas/irap`).then(responseBody) as { git_commit?: { value?: string } }
+    if (existing.git_commit?.value !== manifest.renders.git.commit) throw new Error('Existing IRAP idea points to a different commit.')
+  }
+
+  const artifactUri = `${manifest.live_url}/artifacts/${manifest.implementation.commit}/deployment-manifest.json`
+  const renderingUri = `${manifest.live_url}/renderings/irap-registry-${manifest.implementation.commit}`
+  const renderingPayload = {
+    idea_slug: 'irap', id: renderingUri, title: 'IRAP Federated Registry',
+    description: 'A deployed registry that indexes exact IRAP states, renderings, and signed attestations and announces them over ActivityPub.',
+    artifact: { uri: artifactUri, digest: `sha256:${createHash('sha256').update(manifestBytes).digest('hex')}` },
+    target: { repository: manifest.renders.git.repository, object_format: manifest.renders.git.object_format, revision: manifest.renders.git.commit },
+    creator: { id: 'https://github.com/uncomposed' },
+  }
+  const renderingResponse = await fetch(`${base}/api/v1/renderings`, { method: 'POST', headers, body: JSON.stringify(renderingPayload) })
+  const renderingResult = await responseBody(renderingResponse)
+  if (![201, 409].includes(renderingResponse.status)) throw new Error(`Rendering publication failed (${renderingResponse.status}): ${JSON.stringify(renderingResult)}`)
+  if (renderingResponse.status === 409) {
+    const existing = await fetch(`${base}/api/v1/ideas/irap`).then(responseBody) as { renderings?: Array<{ uri?: string }> }
+    if (!existing.renderings?.some((entry) => entry.uri === renderingUri)) throw new Error('Rendering URI conflict does not match the reference deployment.')
+  }
+  process.stdout.write(JSON.stringify({
+    idea: { status: ideaResponse.status === 201 ? 'published' : 'existing', commit: manifest.renders.git.commit },
+    rendering: { status: renderingResponse.status === 201 ? 'published' : 'existing', uri: renderingUri, artifact_uri: artifactUri },
+  }) + '\n')
+}
 
 async function main() {
   const config = loadConfig()
   const command = process.argv[2]
+  if (command === 'publish-reference') return publishReference(config)
   const db = openDatabase(config.databasePath)
   try {
     if (command === 'backup') {
@@ -72,7 +132,7 @@ async function main() {
       return
     }
 
-    throw new Error('Usage: npm run cli -- backup [data-relative-path] | verify-all | sync')
+    throw new Error('Usage: npm run cli -- backup [data-relative-path] | verify-all | sync | publish-reference')
   } finally {
     db.close()
   }

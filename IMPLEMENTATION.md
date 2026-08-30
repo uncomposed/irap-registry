@@ -20,7 +20,7 @@ Git and signed IRAP objects are authoritative. ActivityPub carries announcements
 - A Fediverse user follows the publisher and receives new idea announcements.
 - An operator audits followers, received activities, delivery state, and the actor's stable key material.
 
-## v0.3 release-candidate scope
+## v0.4 release scope
 
 ### Publishing
 
@@ -43,6 +43,9 @@ Git and signed IRAP objects are authoritative. ActivityPub carries announcements
 - `any_one_pass`, `threshold`, and `all_groups` are the only supported recognition rules.
 - Live reader, rendering-registration, and external-signer attestation workflows.
 - Operator commands for canonical-ref sync, immutable-record re-verification, and consistent online backup.
+- A deterministic deployment manifest binds the public site to exact implementation and protocol commits and recursively digests its built assets.
+- Release artifacts are verified at startup, preserved append-only in the durable data volume, and served from commit-addressed URLs.
+- An idempotent operator command publishes the canonical IRAP idea and reference deployment without exposing the administrator token.
 
 ### Federation
 
@@ -97,6 +100,7 @@ Production Git resolution is intentionally read-only and narrow: HTTPS only, no 
 - Fetch artifact bytes that match, mismatch, redirect, or exceed the size limit and prove their states remain distinct.
 - Stop a recipient server and inspect retry/backoff state.
 - Back up and restore the SQLite volume; the actor public key and raw signed records must remain unchanged.
+- Rebuild from the staged upload payload and prove the same commit-addressed deployment manifest and asset digests are produced and preserved.
 
 ## Next increments
 

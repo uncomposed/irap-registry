@@ -1,0 +1,11 @@
+{
+  "idea_id": "https://ideas.proximitytoprogress.com/ideas/irap",
+  "idea_name": "Idea Rendering Attestation Protocol (IRAP)",
+  "idea_summary": "A Git-native protocol for linking exact idea states, independently published renderings, and attributable signed judgments.",
+  "protocol_repository": "https://github.com/uncomposed/irap-protocol.git",
+  "protocol_object_format": "sha1",
+  "protocol_commit": "ed3ad298540e2369486120225f9e91302a35a404",
+  "protocol_spec_uri": "https://raw.githubusercontent.com/uncomposed/irap-protocol/ed3ad298540e2369486120225f9e91302a35a404/SPEC.yaml",
+  "implementation_repository": "https://github.com/uncomposed/irap-registry.git",
+  "public_origin": "https://ideas.proximitytoprogress.com"
+}

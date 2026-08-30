@@ -4,7 +4,7 @@ A deployable Idea Rendering Attestation Protocol registry: exact Git-state impor
 
 The product distinguishes IRAP authority from federation transport. Git commits and signed attestations remain authoritative; ActivityPub announces ideas and carries follower relationships.
 
-The recovered source package is preserved verbatim in [`protocol/irap-v0.1`](./protocol/irap-v0.1). Its normative [`SPEC.yaml`](./SPEC.yaml), original [`product.md`](./product.md), and original [`acceptance.md`](./acceptance.md) are also available at the repository root. The implemented v0.3 release-candidate boundary is documented in [`IMPLEMENTATION.md`](./IMPLEMENTATION.md), [`IMPLEMENTATION_ACCEPTANCE.md`](./IMPLEMENTATION_ACCEPTANCE.md), and [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+The recovered source package is preserved verbatim in [`protocol/irap-v0.1`](./protocol/irap-v0.1). Its normative [`SPEC.yaml`](./SPEC.yaml), original [`product.md`](./product.md), and original [`acceptance.md`](./acceptance.md) are also available at the repository root. The canonical idea history now lives separately at [`uncomposed/irap-protocol`](https://github.com/uncomposed/irap-protocol). The implemented v0.4 boundary is documented in [`IMPLEMENTATION.md`](./IMPLEMENTATION.md), [`IMPLEMENTATION_ACCEPTANCE.md`](./IMPLEMENTATION_ACCEPTANCE.md), and [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
 ## Local development
 
@@ -57,9 +57,12 @@ Run these inside the production container with `docker compose exec irap`:
 npm run cli -- sync
 npm run cli -- verify-all
 npm run cli -- backup
+npm run cli -- publish-reference
 ```
 
-`sync` advances current canonical refs while preserving historical rendering targets. `verify-all` recomputes derived results without rewriting raw signed records. `backup` uses SQLite's online backup API and writes beneath `/app/data`.
+`sync` advances current canonical refs while preserving historical rendering targets. `verify-all` recomputes derived results without rewriting raw signed records. `backup` uses SQLite's online backup API and writes beneath `/app/data`. `publish-reference` idempotently publishes the canonical IRAP state and this deployment's immutable rendering manifest.
+
+Each build creates a deployment manifest containing the exact implementation and protocol commits plus SHA-256 digests for the rendered site assets. On startup, the service preserves that snapshot beneath the identity-bearing data volume and serves it from `/artifacts/<implementation-commit>/` even after later releases.
 
 ## Provenance
 

@@ -1,7 +1,7 @@
 {
   "name": "irap-explorer",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "npm run build:server && npm run build:web",
     "build:server": "tsc -p tsconfig.server.json",
-    "build:web": "tsc -b tsconfig.app.json tsconfig.node.json && vite build",
+    "build:web": "tsc -b tsconfig.app.json tsconfig.node.json && vite build && node scripts/build-release-artifact.mjs",
     "start": "node server-dist/index.js",
     "cli": "node server-dist/cli.js",
     "test": "vitest run",

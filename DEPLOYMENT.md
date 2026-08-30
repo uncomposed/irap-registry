@@ -26,7 +26,7 @@ sed -i '/^ADMIN_TOKEN=/d' .env
 umask 077 && openssl rand -base64 36 > /tmp/irap-admin-token && printf 'ADMIN_TOKEN=' >> .env && tr -d '\n' < /tmp/irap-admin-token >> .env && printf '\n' >> .env && rm /tmp/irap-admin-token
 ```
 
-Edit `PUBLIC_ORIGIN`, `ACTOR_NAME`, and `ACTOR_DISPLAY_NAME`. The `.env` file must not be committed.
+Edit `PUBLIC_ORIGIN`, `ACTOR_NAME`, and `ACTOR_DISPLAY_NAME`. The reference registry uses `ACTOR_NAME=registry`, producing `@registry@ideas.proximitytoprogress.com`. The `.env` file must not be committed.
 
 Leave `VERIFY_GIT_ON_PUBLISH=true` and `VERIFY_ARTIFACTS_ON_SUBMIT=true` in production. Git fetches default to 60 seconds/200 MiB. Artifact fetches default to 15 seconds/10 MiB, stream through the size boundary, reject redirects, and accept only public HTTPS targets. A fetch failure keeps the rendering but marks its digest unverified; a completed mismatch becomes a severe visible state.
 
@@ -57,6 +57,8 @@ docker compose ps
 curl -fsS http://127.0.0.1:8787/api/health
 ```
 
+After a release starts, its deployment manifest and recursively hashed site assets are verified and retained beneath `/app/data/artifacts/<implementation-commit>`. This append-only snapshot remains available after future releases.
+
 Inspect the live Caddy configuration, merge the `Caddyfile.example` site deliberately, then validate before reloading:
 
 ```sh
@@ -68,12 +70,20 @@ caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
 Replace the host and actor name with the configured values:
 
 ```sh
-curl -fsS 'https://ideas.proximitytoprogress.com/.well-known/webfinger?resource=acct%3Aideas%40ideas.proximitytoprogress.com'
-curl -fsS -H 'Accept: application/activity+json' 'https://ideas.proximitytoprogress.com/ap/actors/ideas'
-curl -fsS -H 'Accept: application/activity+json' 'https://ideas.proximitytoprogress.com/ap/actors/ideas/outbox'
+curl -fsS 'https://ideas.proximitytoprogress.com/.well-known/webfinger?resource=acct%3Aregistry%40ideas.proximitytoprogress.com'
+curl -fsS -H 'Accept: application/activity+json' 'https://ideas.proximitytoprogress.com/ap/actors/registry'
+curl -fsS -H 'Accept: application/activity+json' 'https://ideas.proximitytoprogress.com/ap/actors/registry/outbox'
 ```
 
-Then search for `@ideas@ideas.proximitytoprogress.com` from a separate Fediverse server and follow it. Confirm the follower and delivery state through the authenticated `/api/admin/federation` endpoint.
+Then search for `@registry@ideas.proximitytoprogress.com` from a separate Fediverse server and follow it. Confirm the follower and delivery state through the authenticated `/api/admin/federation` endpoint.
+
+Publish the canonical IRAP idea and this exact deployment rendering without exposing the administrator token outside the container:
+
+```sh
+docker compose exec irap npm run cli -- publish-reference
+```
+
+The command is idempotent: an existing idea/rendering must match the pinned commits and deterministic rendering URI or it fails closed.
 
 ## Backup and rollback
 

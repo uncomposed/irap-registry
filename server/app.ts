@@ -11,6 +11,7 @@ import { registerActivityPub } from './activitypub.js'
 import { registerApi } from './api.js'
 import { GitResolver } from './git-resolver.js'
 import { registerRegistryApi } from './registry-api.js'
+import { preserveReleaseArtifact } from './release-artifacts.js'
 
 export async function buildApp(config: ServiceConfig, overrides: { gitResolver?: GitResolver } = {}) {
   const app = Fastify({
@@ -28,6 +29,9 @@ export async function buildApp(config: ServiceConfig, overrides: { gitResolver?:
   registerActivityPub(app, config, db, federation)
   registerApi(app, config, db, federation, gitResolver)
   registerRegistryApi(app, config, db, federation, gitResolver)
+
+  const artifactRoot = preserveReleaseArtifact(config.staticPath, config.databasePath)
+  await app.register(fastifyStatic, { root: artifactRoot, prefix: '/artifacts/', decorateReply: false })
 
   if (existsSync(config.staticPath)) {
     await app.register(fastifyStatic, { root: config.staticPath, wildcard: false })

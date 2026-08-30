@@ -86,6 +86,14 @@ function parseYamlMapping(value: string, label: string) {
   return parsed
 }
 
+function sameYamlMapping(left: string, right: string) {
+  try {
+    return isDeepStrictEqual(parseYamlMapping(left, 'Stored specification'), parseYamlMapping(right, 'Bundle specification'))
+  } catch {
+    return false
+  }
+}
+
 function fullCommit(value: string, objectFormat: 'sha1' | 'sha256') {
   return (objectFormat === 'sha1' ? /^[0-9a-f]{40}$/ : /^[0-9a-f]{64}$/).test(value)
 }
@@ -172,7 +180,7 @@ export function createPublicationPlan(db: Database.Database, loaded: LoadedPubli
     } else {
       const exact = bySlug.idea_id === ideaState.ideaId && bySlug.name === ideaState.ideaName && bySlug.summary === bundle.idea.summary &&
         bySlug.repository === bundle.idea.state.repository && bySlug.commit_algorithm === bundle.idea.state.object_format &&
-        bySlug.commit_value === bundle.idea.state.commit && bySlug.spec_yaml === loaded.specYaml
+        bySlug.commit_value === bundle.idea.state.commit && sameYamlMapping(bySlug.spec_yaml, loaded.specYaml)
       ideaStatus = exact ? 'existing' : 'conflict'
       if (!exact) conflicts.push(`Stored idea ${bundle.idea.slug} differs from the bundle's exact state or publication metadata.`)
     }

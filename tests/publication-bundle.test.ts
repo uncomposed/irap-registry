@@ -157,6 +157,10 @@ describe('publication bundles', () => {
     const existing = createPublicationPlan(db, loaded)
     expect(existing).toMatchObject({ idea: { status: 'existing' }, renderings: [{ status: 'existing' }], conflicts: [] })
 
+    db.prepare('UPDATE ideas SET spec_yaml = ? WHERE id = ?').run(`${loaded.specYaml}\n`, 'idea-row')
+    const formattingEquivalent = createPublicationPlan(db, loaded)
+    expect(formattingEquivalent).toMatchObject({ idea: { status: 'existing' }, conflicts: [] })
+
     db.prepare('UPDATE renderings SET raw_manifest_json = ? WHERE id = ?').run(JSON.stringify({ ...document, rendering: { ...document.rendering, title: 'Equivocated' } }), 'rendering-row')
     const conflict = createPublicationPlan(db, loaded)
     expect(conflict.renderings[0].status).toBe('conflict')

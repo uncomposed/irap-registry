@@ -96,7 +96,11 @@ function specificationIdentity(value: Record<string, unknown>) {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
     const identity = candidate as Record<string, unknown>
     if (typeof identity.name === 'string') {
-      return { id: typeof identity.id === 'string' ? identity.id : null, name: identity.name }
+      const names = [identity.name]
+      if (key === 'protocol' && typeof identity.short_name === 'string') {
+        names.push(`${identity.name} (${identity.short_name})`)
+      }
+      return { id: typeof identity.id === 'string' ? identity.id : null, names }
     }
   }
   return null
@@ -135,7 +139,7 @@ export async function loadPublicationBundle(
   const stateFiles = await resolver.readFiles(state.repository, state.object_format, state.commit, [bundle.idea.specification_path])
   const specYaml = stateFiles.files[bundle.idea.specification_path]
   const specification = specificationIdentity(parseYamlMapping(specYaml, bundle.idea.specification_path))
-  if (!specification || (specification.id !== null && specification.id !== ideaState.ideaId) || specification.name !== ideaState.ideaName) {
+  if (!specification || (specification.id !== null && specification.id !== ideaState.ideaId) || !specification.names.includes(ideaState.ideaName)) {
     throw new Error(`${bundle.idea.specification_path} identity differs from the historical idea manifest.`)
   }
 
